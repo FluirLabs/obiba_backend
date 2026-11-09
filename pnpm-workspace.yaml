@@ -1,0 +1,28 @@
+packages:
+  - apps/*
+  - packages/*
+
+minimumReleaseAge: 20160
+
+strictDepBuilds: false
+
+onlyBuiltDependencies: []
+
+savePrefix: ""
+
+minimumReleaseAgeExclude:
+  - next
+  - "@next/*"
+  - qs
+  - body-parser
+  - multer
+  - undici
+  - zod
+
+overrides:
+  "@graphql-tools/utils@>=12.0.0 <12.0.2": "12.0.2"
+  "body-parser@>=2.0.0 <2.4.0": "2.4.0"
+  "multer@>=2.0.0 <2.5.0": "2.5.0"
+  "undici@>=7.0.0 <7.30.1": "7.30.1"
+  "uuid@>=10.0.0 <11.1.1": "11.1.1"
+  "zod@>=4.0.0 <4.6.6": "4.6.6"

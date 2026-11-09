@@ -1,0 +1,627 @@
+type AccountCall {
+  accountId: String!
+  argsBase64: String!
+  callId: ID!
+  effectiveAt: String
+  methodName: String!
+  newLimit: String
+  status: String!
+  token: String
+}
+
+type AccountEvent {
+  id: String!
+  kind: String!
+  status: String!
+}
+
+type AccountNameAvailability {
+  accountId: String
+  available: Boolean!
+  name: String!
+  reason: String
+  suggestions: [String!]!
+}
+
+type AccountView {
+  accountId: String
+  explorerUrl: String
+  network: String!
+  status: String
+  usdcContract: String!
+}
+
+type ActivityItem {
+  amount: String!
+  counterparty: String
+  counterpartyName: String
+  createdAt: String!
+  currency: String!
+  direction: String!
+  domain: String!
+  explorerUrl: String
+  id: ID!
+  kind: String!
+  opId: String
+  sandboxId: String
+  status: String!
+  txHash: String
+}
+
+type Balance {
+  available: String!
+  currency: String!
+  domain: String!
+  held: String!
+  posted: String!
+}
+
+input BuildDelegateInput {
+  callId: String
+  cancelRecovery: Boolean
+  opId: String
+  publicKey: String!
+}
+
+type CancelRecoveryCall {
+  accountId: String!
+  argsBase64: String!
+  methodName: String!
+}
+
+input CreateAccountInput {
+  displayName: String!
+  email: String!
+  password: String!
+  turnstileToken: String!
+}
+
+input CreateInvoiceInput {
+  amount: String!
+  expiresInMinutes: Int!
+  reference: String
+}
+
+type CreatedInvoice {
+  amount: String!
+  expiresAtNs: String!
+  feeBps: Int!
+  invoiceId: ID!
+  paymentUrl: String!
+  signature: String!
+}
+
+type DepositInstructions {
+  amountIn: String!
+  createdAt: String
+  deadline: String!
+  depositAddress: String!
+  depositId: ID!
+  depositMemo: String
+  fees: QuoteFees!
+  minAmountIn: String!
+  minAmountOut: String!
+  nearExplorerUrls: [String!]!
+  nearTxHashes: [String!]!
+  origin: String!
+  originTxHashes: [String!]!
+  status: String!
+  timeEstimateSeconds: Int
+}
+
+type DepositOption {
+  decimals: Int!
+  key: String!
+  label: String!
+  minUsd: Int!
+}
+
+type DeviceResult {
+  provisioningQueued: Boolean!
+  publicKey: String!
+  status: String!
+}
+
+type DeviceView {
+  createdAt: String!
+  initial: Boolean!
+  kind: String!
+  label: String
+  publicKey: String!
+  status: String!
+}
+
+type DirectDeposit {
+  address: String!
+  network: String!
+  token: String!
+  tokenContract: String!
+}
+
+type IndicativeRate {
+  asOf: String!
+  base: String!
+  quote: String!
+  rate: String!
+  source: String!
+}
+
+type InternalTestPayment {
+  op: PreparedOp!
+  receipt: SandboxReceiptView!
+}
+
+type InvoicePayment {
+  amountIn: String!
+  deadline: String!
+  depositAddress: String!
+  depositMemo: String
+  invoiceId: String!
+  minAmountIn: String!
+  origin: String!
+  originTxHashes: [String!]!
+  paymentId: ID!
+  status: String!
+  timeEstimateSeconds: Int
+}
+
+type InvoiceView {
+  amount: String!
+  crossChainEnabled: Boolean!
+  expiresAtNs: String!
+  feeBps: Int!
+  invoiceId: ID!
+  merchantAccount: String!
+  merchantName: String!
+  paymentUrl: String!
+  status: String!
+  token: String!
+}
+
+type Me {
+  accountId: String
+  accountName: String
+  accountStatus: String
+  displayName: String!
+  email: String!
+  handle: String
+  merchant: Boolean!
+  phone: String!
+  pilotAllowed: Boolean!
+  uid: ID!
+  viewOnly: Boolean!
+}
+
+type MerchantInvoice {
+  amount: String!
+  createdAt: String!
+  expiresAtNs: String!
+  fee: String
+  feeBps: Int!
+  invoiceId: ID!
+  net: String
+  paidAt: String
+  paidExplorerUrl: String
+  paidTxHash: String
+  payer: String
+  paymentUrl: String!
+  reference: String
+  status: String!
+}
+
+type Mutation {
+  beginViewOnlySession: Boolean!
+  buildDelegate(input: BuildDelegateInput!): UnsignedDelegateView!
+  cancelRecovery(signedDelegate: String!): RecoveryView!
+  cancelSupportRecovery: SupportCaseView!
+  confirmPhone: Boolean!
+  confirmSupportRecovery(newPublicKey: String!, token: String!): SupportRequestReceipt!
+  createAccount(input: CreateAccountInput!): Boolean!
+  createInvoice(input: CreateInvoiceInput!): CreatedInvoice!
+  markNotificationsRead(upToId: String!): Int!
+  openSupportRecovery(newPublicKey: String!): SupportCaseView!
+  prepareInternalTestPayment(input: SandboxRequestInput!): InternalTestPayment!
+  prepareInvoicePayment(invoiceId: String!): PreparedOp!
+  prepareLimitChange(newLimit: String!): AccountCall!
+  prepareTokenEnable(token: String!): AccountCall!
+  prepareTransfer(input: PrepareTransferInput!): PreparedOp!
+  prepareWithdrawal(input: PrepareWithdrawalInput!): PreparedWithdrawal!
+  quoteDeposit(input: StartDepositInput!): QuoteView!
+  quoteWithdrawal(input: PrepareWithdrawalInput!): QuoteView!
+  registerDevice(publicKey: String!): DeviceResult!
+  registerProfile(input: RegisterProfileInput!): Me!
+  registerRecoveryKit(devicePublicKey: String!, deviceSignature: String!, kitPublicKey: String!): RecoveryKitStatus!
+  requestCosign(deviceSignature: String!, opId: String!): PreparedOp!
+  requestLimitRaise(newLimit: String!): AccountCall!
+  requestPasswordReset(email: String!): Boolean!
+  requestSupportRecovery(email: String!, newPhone: String!): Boolean!
+  sandboxSubmit(input: SandboxRequestInput!): SandboxReceiptView!
+  sendVerificationEmail: Boolean!
+  signOutEverywhere: Boolean!
+  startDeposit(input: StartDepositInput!): DepositInstructions!
+  startInvoicePayment(input: StartInvoicePaymentInput!): InvoicePayment!
+  startRecovery(kitSignature: String, newPublicKey: String!): RecoveryView!
+  submitAccountCall(callId: String!, signedDelegate: String!): AccountCall!
+  submitSignedOp(idempotencyKey: String!, opId: String!, signedDelegate: String!): SubmitResult!
+}
+
+type NotificationView {
+  createdAt: String!
+  id: ID!
+  kind: String!
+  read: Boolean!
+  ref: String
+}
+
+type OpView {
+  amount: String!
+  createdAt: String!
+  explorerUrls: [String!]!
+  invoiceId: String
+  kind: String!
+  opId: ID!
+  receiver: String!
+  status: String!
+  txHashes: [String!]!
+  updatedAt: String!
+}
+
+type PendingItem {
+  amount: String!
+  counterparty: String
+  createdAt: String!
+  currency: String!
+  id: ID!
+  kind: String!
+  status: String!
+}
+
+input PrepareTransferInput {
+  amount: String!
+  toAccount: String
+  toHandle: String
+  toPhone: String
+}
+
+input PrepareWithdrawalInput {
+  amount: String!
+  destination: String!
+  recipientAddress: String!
+}
+
+type PreparedOp {
+  accountId: String!
+  amount: String!
+  argsBase64: String!
+  deviceOpHash: String!
+  expiresAtNs: String!
+  methodName: String!
+  opId: ID!
+  receiver: String!
+}
+
+type PreparedWithdrawal {
+  op: PreparedOp!
+  withdrawal: WithdrawalView!
+}
+
+type Query {
+  account: AccountView!
+  accountCall(callId: String!): AccountCall
+  accountNameAvailability(name: String!): AccountNameAvailability!
+  activity(before: String, first: Int! = 20): [ActivityItem!]!
+  assembleSignedDelegate(delegateBase64: String!, signatureBase64: String!): String!
+  balances: [Balance!]!
+  cancelRecoveryCall: CancelRecoveryCall!
+  demoBalance: Balance!
+  deposit(id: String!): DepositInstructions
+  depositOptions: [DepositOption!]!
+  deposits(first: Int! = 20): [DepositInstructions!]!
+  devices: [DeviceView!]!
+  directDeposit: DirectDeposit!
+  indicativeRate: IndicativeRate
+  invoice(invoiceId: String!): InvoiceView
+  invoicePayOptions: [DepositOption!]!
+  invoicePayment(paymentId: String!): InvoicePayment
+  me: Me!
+  merchantInvoices(before: String, first: Int! = 20): [MerchantInvoice!]!
+  notifications(first: Int! = 20): [NotificationView!]!
+  op(opId: String!): OpView
+  pendingActivity: [PendingItem!]!
+  recipient(query: String!): Recipient
+  recovery: RecoveryView
+  recoveryChallenge(newPublicKey: String!): RecoveryChallenge!
+  recoveryKit: RecoveryKitStatus!
+  remittanceCorridors: [RemittanceCorridor!]!
+  sandboxCatalog: SandboxCatalog!
+  sandboxOp(id: String!): SandboxReceiptView
+  sandboxOps(first: Int! = 20): [SandboxReceiptView!]!
+  sandboxQuote(input: SandboxRequestInput!): SandboxQuoteView!
+  spendingLimit: SpendingLimit!
+  supportCase: SupportCaseView
+  supportLink(token: String!): SupportLinkView
+  supportRequestStatus(caseId: String!, statusToken: String!): SupportRequestStatus
+  tokensToEnable: [String!]!
+  transaction(id: String!): TransactionView
+  withdrawal(id: String!): WithdrawalView
+  withdrawalOptions: [WithdrawalOption!]!
+  withdrawals(first: Int! = 20): [WithdrawalView!]!
+}
+
+type QuoteFees {
+  amountInUsd: String
+  amountOutUsd: String
+  appFeeBps: Int!
+  providerSpreadUsd: String
+  source: String!
+}
+
+type QuoteView {
+  amountIn: String!
+  amountOut: String!
+  asset: String!
+  deadline: String!
+  fees: QuoteFees!
+  minAmountIn: String!
+  minAmountOut: String!
+  timeEstimateSeconds: Int
+  totalDebit: String!
+}
+
+type Recipient {
+  accountId: String!
+  canReceive: Boolean!
+  displayName: String
+  handle: String
+  kind: String!
+}
+
+type RecoveryChallenge {
+  accountId: String!
+  messageBase64: String!
+}
+
+type RecoveryKitStatus {
+  active: Boolean!
+  createdAt: String
+  publicKey: String
+}
+
+type RecoveryView {
+  createdAt: String!
+  executableAt: String
+  newPublicKey: String!
+  reason: String
+  recoveryId: ID!
+  status: String!
+}
+
+input RegisterProfileInput {
+  accountName: String!
+  displayName: String!
+  handle: String
+  phone: String!
+}
+
+type RemittanceCorridor {
+  country: String!
+  countryName: String!
+  currency: String!
+  maxAmount: String!
+  methods: [RemittanceMethod!]!
+  provider: String!
+  rate: String
+  rateAsOf: String
+  rateSource: String
+}
+
+type RemittanceMethod {
+  feeBps: Int!
+  kind: String!
+  label: String!
+  providers: [String!]!
+  target: String!
+  type: String!
+}
+
+type SandboxCatalog {
+  currency: String!
+  notice: String!
+  products: [SandboxProductView!]!
+  rateAsOf: String
+  rateSource: String
+  services: [SandboxProviderView!]!
+  simulatedRate: String
+}
+
+type SandboxProductView {
+  id: String!
+  label: String!
+  priceGhs: String!
+  provider: String!
+}
+
+type SandboxProviderView {
+  direction: String!
+  feeBps: Int!
+  kind: String!
+  label: String!
+  providers: [String!]!
+  target: String!
+  usesProducts: Boolean!
+}
+
+type SandboxQuoteView {
+  amount: String!
+  amountGhs: String
+  amountLocal: String!
+  country: String!
+  currency: String!
+  direction: String!
+  fee: String!
+  feeGhs: String
+  feeLocal: String!
+  kind: String!
+  localCurrency: String!
+  notice: String!
+  productId: String
+  productLabel: String
+  provider: String!
+  rateAsOf: String
+  rateSource: String!
+  simulatedRate: String!
+  target: String!
+  total: String!
+  totalGhs: String
+  totalLocal: String!
+}
+
+type SandboxReceiptView {
+  amount: String!
+  amountGhs: String
+  amountLocal: String
+  country: String
+  createdAt: String!
+  currency: String!
+  feeGhs: String
+  feeLocal: String
+  funding: String!
+  id: ID!
+  invoiceId: String
+  kind: String!
+  localCurrency: String
+  notice: String!
+  opId: String
+  provider: String!
+  recipientName: String
+  status: String!
+  target: String!
+  token: String
+}
+
+input SandboxRequestInput {
+  amountGhs: String
+  amountLocal: String
+  country: String
+  kind: String!
+  productId: String
+  provider: String
+  recipientName: String
+  target: String!
+}
+
+type SpendingLimit {
+  currency: String!
+  dailyLimit: String!
+  frozenUntil: String
+  maxOpAmount: String!
+  pendingLimit: String
+  pendingLimitEffectiveAt: String
+  recoveryExecutableAt: String
+  remaining: String!
+  spent24h: String!
+}
+
+input StartDepositInput {
+  amount: String!
+  origin: String!
+  refundAddress: String!
+}
+
+input StartInvoicePaymentInput {
+  invoiceId: String!
+  origin: String!
+  refundAddress: String!
+}
+
+type SubmitResult {
+  delegateHash: String!
+  opId: ID!
+  status: String!
+}
+
+type Subscription {
+  accountEvents: AccountEvent!
+  balanceChanged: AccountEvent!
+  depositUpdated: AccountEvent!
+  deviceLinkUpdated: AccountEvent!
+  transactionUpdated: AccountEvent!
+}
+
+type SupportCaseView {
+  caseId: ID!
+  closedReason: String
+  createdAt: String!
+  earliestAt: String!
+  newPublicKey: String!
+  status: String!
+}
+
+type SupportLinkView {
+  expiresAt: String!
+  firstName: String!
+  uid: String!
+}
+
+type SupportRequestReceipt {
+  caseId: ID!
+  earliestAt: String!
+  statusToken: String!
+}
+
+type SupportRequestStatus {
+  activated: Boolean!
+  closedReason: String
+  earliestAt: String!
+  movesAt: String
+  recoveryStatus: String
+  status: String!
+}
+
+type TransactionView {
+  amount: String!
+  asset: String!
+  createdAt: String!
+  destinationNetwork: String
+  domain: String!
+  explorerUrls: [String!]!
+  fee: String
+  id: ID!
+  notice: String
+  quoteSource: String
+  recipient: String
+  references: [String!]!
+  sourceNetwork: String
+  status: String!
+  type: String!
+}
+
+type UnsignedDelegateView {
+  accountId: String!
+  delegateBase64: String!
+  maxBlockHeight: String!
+  methodName: String!
+  nonce: String!
+  signingHashHex: String!
+}
+
+type WithdrawalOption {
+  key: String!
+  label: String!
+  network: String!
+}
+
+type WithdrawalView {
+  amountIn: String!
+  amountOut: String!
+  createdAt: String!
+  destination: String!
+  destinationTxHashes: [String!]!
+  fees: QuoteFees!
+  minAmountOut: String!
+  nearTxHash: String
+  recipient: String!
+  status: String!
+  timeEstimateSeconds: Int
+  withdrawalId: ID!
+}

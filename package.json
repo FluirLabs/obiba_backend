@@ -1,0 +1,14 @@
+{
+  "name": "obiba",
+  "private": true,
+  "packageManager": "pnpm@10.34.7",
+  "engines": {
+    "node": ">=22.15.0"
+  },
+  "scripts": {
+    "test": "pnpm -r --workspace-concurrency=1 test",
+    "typecheck": "pnpm -r typecheck",
+    "build": "pnpm -r build",
+    "audit:deps": "pnpm audit --audit-level=moderate"
+  }
+}
