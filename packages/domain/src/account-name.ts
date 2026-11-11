@@ -11,7 +11,7 @@ export const RESERVED_ACCOUNT_NAMES = new Set([
   'testnet', 'treasury', 'undefined', 'usdc', 'usdt', 'wallet', 'www',
 ]);
 
-const BLOCKED_PARTS = ['obiba', 'support', 'admin', 'official', 'verify', 'secure', 'refund', 'helpline', 'customercare'];
+export const BLOCKED_PARTS = ['obiba', 'support', 'admin', 'official', 'verify', 'secure', 'refund', 'helpline', 'customercare'];
 
 export function normalizeAccountName(raw: string): string {
   return raw.trim().toLowerCase();

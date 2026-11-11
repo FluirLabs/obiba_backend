@@ -10,3 +10,4 @@ export * from './local-rails';
 export * from './account-name';
 export * from './factors';
 export * from './support';
+export * from './handle';

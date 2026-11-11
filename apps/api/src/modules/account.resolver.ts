@@ -3,11 +3,11 @@ import { Args, Context, Mutation, Query, Resolver } from '@nestjs/graphql';
 import type Redis from 'ioredis';
 import type { Pool, PoolClient } from 'pg';
 import { withUserTx } from '@obiba/db';
-import { accountNameProblem, accountNameSuggestions, checkSignupEmail, ed25519KeyBytes, emailJob, enqueueEmail, normalizeAccountName, WATCH_HOT_KEY, WATCH_HOT_MS } from '@obiba/domain';
+import { accountNameProblem, accountNameSuggestions, checkSignupEmail, ed25519KeyBytes, emailJob, enqueueEmail, handleCandidates, handleProblem, normalizeAccountName, normalizeHandle, WATCH_HOT_KEY, WATCH_HOT_MS } from '@obiba/domain';
 import { APP_CONFIG, type AppConfig } from '../config';
 import { ensureSandboxMirror } from './sandbox-mirror';
 import { appError } from '../errors';
-import { AccountNameAvailability, Balance, DeviceResult, Me, RegisterProfileInput } from '../graphql/types';
+import { AccountNameAvailability, Balance, DeviceResult, HandleAvailability, Me, RegisterProfileInput } from '../graphql/types';
 import { AuditService } from '../infra/audit';
 import { PG_POOL, REDIS } from '../infra/tokens';
 import { AllowWithoutProfile, RateLimit, RequireFreshSession } from '../security/decorators';
@@ -78,9 +78,13 @@ export class AccountResolver {
   @Query(() => Me)
   async me(@Context('req') req: ObibaRequest): Promise<Me> {
     const { uid } = identityOf(req);
-    const r = await withUserTx(this.pool, uid, (c) => c.query<UserRow>(ME_SQL, [uid]));
-    if (!r.rows[0]) throw appError('PROFILE_REQUIRED');
-    return toMe(r.rows[0], req.viewOnly === true);
+    const row = await withUserTx(this.pool, uid, async (c) => {
+      const r = await c.query<UserRow>(ME_SQL, [uid]);
+      if (!r.rows[0] || r.rows[0].handle !== null || req.viewOnly === true) return r.rows[0];
+      return { ...r.rows[0], handle: await assignHandle(c, r.rows[0].display_name) };
+    });
+    if (!row) throw appError('PROFILE_REQUIRED');
+    return toMe(row, req.viewOnly === true);
   }
 
   @Mutation(() => Boolean)
@@ -104,7 +108,8 @@ export class AccountResolver {
     }
     const name = parse(displayName, input.displayName, 'displayName');
     const phone = ghanaPhone(input.phone);
-    const h = input.handle == null ? null : parse(handle, input.handle, 'handle');
+    const h = input.handle == null || input.handle.trim() === '' ? null : parse(handle, normalizeHandle(input.handle), 'handle');
+    if (h !== null && handleProblem(h) !== null) throw appError('BAD_INPUT', 'handle');
     const accountName = normalizeAccountName(input.accountName);
     if (accountNameProblem(accountName, this.parent()) !== null) throw appError('BAD_INPUT', 'accountName');
     try {
@@ -112,11 +117,13 @@ export class AccountResolver {
         const existing = await c.query<UserRow>(ME_SQL, [identity.uid]);
         if (existing.rows[0]) return toMe(existing.rows[0]);
         if (await nameTaken(c, accountName)) throw appError('CONFLICT', 'accountName');
+        if (h !== null && (await handleTaken(c, h))) throw appError('CONFLICT', 'handle');
         const created = await c.query(
           `insert into identity.users(uid, display_name, phone_e164, email, handle, account_name)
            values ($1, $2, $3, $4, $5, $6) on conflict (uid) do nothing`,
           [identity.uid, name, phone, identity.email, h, accountName],
         );
+        if (created.rowCount && h === null) await assignHandle(c, name);
         if (created.rowCount) await enqueueEmail(c, emailJob('WELCOME', { uid: identity.uid }, `welcome:${identity.uid}`, {}));
         const r = await c.query<UserRow>(ME_SQL, [identity.uid]);
         return toMe(r.rows[0]!);
@@ -148,6 +155,47 @@ export class AccountResolver {
       const available = problem === null && !taken;
       return { name, accountId: available ? `${name}.${parent}` : null, available, reason: problem ?? (taken ? 'TAKEN' : null), suggestions };
     });
+  }
+
+  @Query(() => HandleAvailability)
+  @RateLimit('lookup')
+  async handleAvailability(@Context('req') req: ObibaRequest, @Args('handle') raw: string): Promise<HandleAvailability> {
+    const { uid } = identityOf(req);
+    const h = normalizeHandle(raw).slice(0, 64);
+    return withUserTx(this.pool, uid, async (c) => {
+      const problem = handleProblem(h);
+      const taken = problem === null && (await handleTaken(c, h));
+      const suggestions: string[] = [];
+      if (problem !== null || taken) {
+        const me = await c.query<{ display_name: string; handle: string | null }>('select display_name, handle from identity.users where uid = $1', [uid]);
+        const fromName = handleCandidates(me.rows[0]?.display_name ?? '', 6);
+        const seeds = problem === null ? [...handleCandidates(h, 6), ...fromName] : fromName;
+        for (const s of new Set(seeds)) {
+          if (suggestions.length >= 3) break;
+          if (s !== h && s !== me.rows[0]?.handle && !(await handleTaken(c, s))) suggestions.push(s);
+        }
+      }
+      return { handle: h, available: problem === null && !taken, reason: problem ?? (taken ? 'TAKEN' : null), suggestions };
+    });
+  }
+
+  @Mutation(() => Me)
+  @RateLimit('profile')
+  async changeHandle(@Context('req') req: ObibaRequest, @Args('handle') raw: string): Promise<Me> {
+    const { uid } = identityOf(req);
+    const h = normalizeHandle(raw);
+    if (handleProblem(h) !== null) throw appError('BAD_INPUT', 'handle');
+    try {
+      return await withUserTx(this.pool, uid, async (c) => {
+        await c.query('select identity.set_my_handle($1)', [h]);
+        await this.audit.record({ actor: uid, action: 'profile.handle', outcome: 'ALLOWED', requestId: req.requestId, details: { handle: h } }, c);
+        const r = await c.query<UserRow>(ME_SQL, [uid]);
+        return toMe(r.rows[0]!);
+      });
+    } catch (err) {
+      if ((err as { code?: string }).code === '23505') throw appError('CONFLICT', 'handle');
+      throw err;
+    }
   }
 
   private parent(): string {
@@ -196,6 +244,28 @@ export class AccountResolver {
     });
     return r.rows.map((b) => ({ domain: b.domain, currency: b.currency, posted: b.posted, held: b.held, available: b.available }));
   }
+}
+
+async function handleTaken(c: PoolClient, h: string): Promise<boolean> {
+  const r = await c.query<{ taken: boolean }>('select identity.handle_taken($1) as taken', [h]);
+  return r.rows[0]?.taken !== false;
+}
+
+async function assignHandle(c: PoolClient, displayName: string): Promise<string | null> {
+  const fallback = Array.from({ length: 5 }, () => `${handleCandidates(displayName, 1)[0]!.slice(0, 18)}${Math.floor(1000 + Math.random() * 9000)}`);
+  for (const candidate of [...handleCandidates(displayName, 12), ...fallback]) {
+    if (await handleTaken(c, candidate)) continue;
+    await c.query('savepoint assign_handle');
+    try {
+      const r = await c.query<{ handle: string }>('select identity.set_my_handle($1) as handle', [candidate]);
+      await c.query('release savepoint assign_handle');
+      return r.rows[0]!.handle;
+    } catch (err) {
+      await c.query('rollback to savepoint assign_handle');
+      if ((err as { code?: string }).code !== '23505') throw err;
+    }
+  }
+  return null;
 }
 
 async function nameTaken(c: PoolClient, name: string): Promise<boolean> {

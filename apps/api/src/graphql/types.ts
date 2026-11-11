@@ -32,6 +32,14 @@ export class RegisterProfileInput {
 }
 
 @ObjectType()
+export class HandleAvailability {
+  @Field() handle!: string;
+  @Field() available!: boolean;
+  @Field(() => String, { nullable: true }) reason!: string | null;
+  @Field(() => [String]) suggestions!: string[];
+}
+
+@ObjectType()
 export class AccountNameAvailability {
   @Field() name!: string;
   @Field(() => String, { nullable: true }) accountId!: string | null;
