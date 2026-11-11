@@ -165,6 +165,16 @@ export class MoneyRequestView {
   @Field() paying!: boolean;
   @Field() createdAt!: string;
   @Field() updatedAt!: string;
+  @Field() permission!: string;
+}
+
+@ObjectType()
+export class RequestContactView {
+  @Field(() => ID) id!: string;
+  @Field() kind!: string;
+  @Field() name!: string;
+  @Field(() => String, { nullable: true }) handle!: string | null;
+  @Field() since!: string;
 }
 
 @ObjectType()

@@ -2,7 +2,7 @@ import { randomInt } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { Logger } from 'pino';
 import { withTx } from '@obiba/db';
-import { creditDedupeKey, emailJob, enqueueEmail, originLabel, publishUserEvents, type EventPublisher, type TokenSpec, type UserEvent } from '@obiba/domain';
+import { creditDedupeKey, emailJob, enqueueEmail, originLabel, publishUserEvents, USDC_DECIMALS, type EventPublisher, type TokenSpec, type UserEvent } from '@obiba/domain';
 import { RpcError, extractEvents, extractFromOutcomes, type BlockOutcomes, type NearRpc, type ObibaEvent, type TransferEvent } from '@obiba/near';
 
 export interface IngestConfig {
@@ -55,9 +55,11 @@ export class Ingestor {
     const notices: Notice[] = [];
     await withTx(this.pool, async (c) => {
       const tracked = await this.trackedAccounts(c, events.transfers);
-      for (const e of events.obiba) await this.settle(c, e, notices);
+      const pendingRequests: Array<{ opId: string; txHash: string | null }> = [];
+      for (const e of events.obiba) await this.settle(c, e, notices, pendingRequests);
       const fresh: TransferEvent[] = [];
       for (const t of events.transfers) if (await this.record(c, t, tracked, txHash, (t.blockHash && heights.get(t.blockHash)) || 0n, false)) fresh.push(t);
+      await this.settleRequests(c, pendingRequests, notices);
       await c.query('insert into chain.ingested_txs(tx_hash, sender) values ($1, $2) on conflict do nothing', [txHash, sender]);
       await this.failAbandoned(c, txHash, notices);
       const credited = depositId ? await this.creditDeposit(c, depositId, events.transfers, notices, txHash) : null;
@@ -74,9 +76,11 @@ export class Ingestor {
     const notices: Notice[] = [];
     await withTx(this.pool, async (c) => {
       const tracked = await this.trackedAccounts(c, events.transfers);
-      for (const e of events.obiba) await this.settle(c, e, notices);
+      const pendingRequests: Array<{ opId: string; txHash: string | null }> = [];
+      for (const e of events.obiba) await this.settle(c, e, notices, pendingRequests);
       const fresh: TransferEvent[] = [];
       for (const t of events.transfers) if (await this.record(c, t, tracked, t.txHash ?? null, height, true)) fresh.push(t);
+      await this.settleRequests(c, pendingRequests, notices);
       for (const t of fresh) await this.emailCredits(c, [t], tracked, t.txHash ?? null);
       notices.push(...(await this.balanceNotices(c, events.transfers, tracked)));
       const moved =
@@ -224,6 +228,20 @@ export class Ingestor {
     }
   }
 
+  private async settleRequests(c: PoolClient, pending: Array<{ opId: string; txHash: string | null }>, notices: Notice[]): Promise<void> {
+    for (const { opId, txHash } of pending) {
+      const r = await c.query<{ request_id: string; requester_uid: string; payer_name: string; payer_handle: string | null; amount: string; note: string | null }>(
+        'select * from ops.settle_money_request($1, $2)',
+        [opId, txHash],
+      );
+      const f = r.rows[0];
+      if (!f) continue;
+      notices.push({ uid: f.requester_uid, kind: 'invoice', id: f.request_id, status: 'PAID' });
+      const facts = { requestId: f.request_id, name: f.payer_name, handle: f.payer_handle, units: f.amount, decimals: USDC_DECIMALS, currency: 'USDC', note: f.note, firstTime: false, at: new Date().toISOString() };
+      await enqueueEmail(c, emailJob('MONEY_REQUEST_PAID', { uid: f.requester_uid }, `money-request:${f.request_id}:paid`, facts));
+    }
+  }
+
   private async settleInternalTest(c: PoolClient, by: { invoiceId?: string; opId?: string }, status: 'SUCCEEDED' | 'FAILED', txHash: string | null, notices: Notice[]): Promise<void> {
     const rows = await c.query<{ id: string; uid: string; kind: string }>(
       `select id, uid, kind from ops.sandbox_ops
@@ -241,7 +259,7 @@ export class Ingestor {
     }
   }
 
-  private async settle(c: PoolClient, e: ObibaEvent, notices: Notice[]): Promise<void> {
+  private async settle(c: PoolClient, e: ObibaEvent, notices: Notice[], pendingRequests: Array<{ opId: string; txHash: string | null }>): Promise<void> {
     if (e.event === 'op_executed' || e.event === 'op_failed') {
       const opId = e.data.op_id;
       if (typeof opId !== 'string' || !HEX_ID.test(opId)) return;
@@ -256,10 +274,7 @@ export class Ingestor {
         await c.query('select ledger.close_hold($1, $2)', [`op:${opId}`, settled ? 'CAPTURED' : 'RELEASED']);
         if (!settled && row.invoice_id) await c.query('select ops.release_invoice($1)', [row.invoice_id]);
         if (!settled) await this.settleInternalTest(c, { opId }, 'FAILED', null, notices);
-        if (settled) {
-          const requester = (await c.query<{ uid: string | null }>('select ops.settle_money_request($1) as uid', [opId])).rows[0]?.uid;
-          if (requester) notices.push({ uid: requester, kind: 'invoice', id: opId, status: 'PAID' });
-        }
+        if (settled) pendingRequests.push({ opId, txHash: e.txHash ?? null });
         notices.push({ uid: row.uid, kind: 'op', id: opId, status });
       }
       return;

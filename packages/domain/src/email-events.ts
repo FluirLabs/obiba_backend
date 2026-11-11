@@ -28,6 +28,18 @@ export interface WithdrawalFacts {
   at: string;
 }
 
+export interface MoneyRequestFacts {
+  requestId: string;
+  name: string;
+  handle: string | null;
+  units: string;
+  decimals: number;
+  currency: string;
+  note: string | null;
+  firstTime: boolean;
+  at: string;
+}
+
 export interface DeviceFacts {
   device: string | null;
   browser: string | null;
@@ -51,6 +63,9 @@ export interface EmailPayloads {
   WITHDRAWAL_COMPLETED: WithdrawalFacts;
   WITHDRAWAL_REVIEW: WithdrawalFacts;
   WITHDRAWAL_FAILED: WithdrawalFacts & { refunded: boolean };
+  MONEY_REQUESTED: MoneyRequestFacts;
+  MONEY_REQUEST_PAID: MoneyRequestFacts;
+  MONEY_REQUEST_DECLINED: MoneyRequestFacts;
 }
 
 export type EmailKind = keyof EmailPayloads;

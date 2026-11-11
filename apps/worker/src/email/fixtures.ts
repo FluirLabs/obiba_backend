@@ -6,6 +6,7 @@ export const PREVIEW_LINK = 'https://app.obibajk.com/auth/action?mode=resetPassw
 
 const at = '2026-11-09T14:32:00.000Z';
 const deposit = { depositId: '7f3a91c4-2b1e-4c55-9d0a-1b2c3d4e5f60', origin: 'USDT on Tron', amount: '250', at };
+const moneyRequest = { requestId: '5f50f1c246c04e4d85656c9667a69fed', name: 'Kwabena Asante', handle: 'kwabi', units: '25000000', decimals: 6, currency: 'USDC', note: 'School fees', firstTime: false, at };
 const withdrawal = { withdrawalId: 'a14e0c77-58d2-4f19-8b36-9c0d1e2f3a4b', units: '120500000', decimals: 6, currency: 'USDC', destination: 'USDC on Base', recipient: '0x71C7656EC7ab88b098defB751B7401B5f6d8976F', received: '120.32', at };
 
 export interface Fixture<K extends EmailKind = EmailKind> {
@@ -39,4 +40,8 @@ export const FIXTURES: Fixture[] = [
   f('withdrawal-review', 'WITHDRAWAL_REVIEW', withdrawal),
   f('withdrawal-refunded', 'WITHDRAWAL_FAILED', { ...withdrawal, refunded: true }),
   f('withdrawal-failed', 'WITHDRAWAL_FAILED', { ...withdrawal, refunded: false }),
+  f('money-requested', 'MONEY_REQUESTED', moneyRequest),
+  f('money-request-first-time', 'MONEY_REQUESTED', { ...moneyRequest, firstTime: true }),
+  f('money-request-paid', 'MONEY_REQUEST_PAID', { ...moneyRequest, name: 'Ama Owusu', handle: 'ama' }),
+  f('money-request-declined', 'MONEY_REQUEST_DECLINED', { ...moneyRequest, name: 'Ama Owusu', handle: 'ama' }),
 ];

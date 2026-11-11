@@ -33,6 +33,7 @@ export const RULES: Record<string, Rule> = {
   lookup: { points: 30, duration: 60, key: 'uid', onStoreFailure: 'deny' },
   quote: { points: 20, duration: 60, key: 'uid', onStoreFailure: 'deny' },
   invoice_create: { points: 30, duration: 60, key: 'uid', onStoreFailure: 'deny' },
+  money_request: { points: 10, duration: 600, key: 'uid', onStoreFailure: 'deny' },
   invoice_view: { points: 60, duration: 60, key: 'ip', onStoreFailure: 'allow' },
   invoice_pay_quote: { points: 10, duration: 60, key: 'ip', onStoreFailure: 'deny' },
   sandbox: { points: 30, duration: 60, key: 'uid', onStoreFailure: 'allow' },

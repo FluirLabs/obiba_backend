@@ -231,6 +231,7 @@ type MoneyRequestView {
   direction: String!
   note: String
   paying: Boolean!
+  permission: String!
   requestId: ID!
   status: String!
   updatedAt: String!
@@ -264,6 +265,8 @@ type Mutation {
   requestCosign(deviceSignature: String!, opId: String!): PreparedOp!
   requestPasswordReset(email: String!): Boolean!
   requestSupportRecovery(email: String!, newPhone: String!): Boolean!
+  respondToMoneyRequest(decision: String!, requestId: String!): MoneyRequestView!
+  revokeRequestPermission(id: String!): Boolean!
   sandboxSubmit(input: SandboxRequestInput!): SandboxReceiptView!
   sendVerificationEmail: Boolean!
   signOutEverywhere: Boolean!
@@ -272,6 +275,7 @@ type Mutation {
   startRecovery(kitSignature: String, newPublicKey: String!): RecoveryView!
   submitAccountCall(callId: String!, signedDelegate: String!): AccountCall!
   submitSignedOp(idempotencyKey: String!, opId: String!, signedDelegate: String!): SubmitResult!
+  unblockRequester(id: String!): Boolean!
 }
 
 type NotificationView {
@@ -365,6 +369,7 @@ type Query {
   recoveryChallenge(newPublicKey: String!): RecoveryChallenge!
   recoveryKit: RecoveryKitStatus!
   remittanceCorridors: [RemittanceCorridor!]!
+  requestContacts: [RequestContactView!]!
   sandboxCatalog: SandboxCatalog!
   sandboxOp(id: String!): SandboxReceiptView
   sandboxOps(first: Int! = 20): [SandboxReceiptView!]!
@@ -454,6 +459,14 @@ type RemittanceMethod {
   providers: [String!]!
   target: String!
   type: String!
+}
+
+type RequestContactView {
+  handle: String
+  id: ID!
+  kind: String!
+  name: String!
+  since: String!
 }
 
 type SandboxCatalog {

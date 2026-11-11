@@ -160,10 +160,7 @@ export class PaymentsResolver {
     return withUserTx(this.pool, uid, async (c) => {
       const accountId = await activeAccount(c, uid);
       if (requestId !== null) {
-        const owed = await c.query<{ requester_account: string; amount: string }>(
-          "select requester_account, amount::text from ops.money_requests where request_id = $1 and payer_uid = $2 and status = 'PENDING'",
-          [requestId, uid],
-        );
+        const owed = await c.query<{ requester_account: string; amount: string }>('select * from ops.payable_money_request($1)', [requestId]);
         const due = owed.rows[0];
         if (!due) throw appError('CONFLICT', 'requestId');
         if (field !== 'toAccount' || query.value !== due.requester_account || units.toString() !== due.amount) throw appError('BAD_INPUT', 'requestId');
@@ -248,6 +245,8 @@ export class PaymentsResolver {
             const reserved = await c.query<{ ok: boolean }>('select ops.reserve_invoice($1) as ok', [op.invoice_id]);
             if (!reserved.rows[0]?.ok) throw appError('CONFLICT', 'invoiceId');
           }
+          const payable = await c.query<{ ok: boolean }>('select ops.money_request_submittable($1) as ok', [opId]);
+          if (!payable.rows[0]?.ok) throw appError('CONFLICT', 'requestId');
           const wallet = await c.query<{ id: string }>(
             "select ledger.ensure_account('REAL', 'WALLET', $1, 'USDC') as id",
             [`wallet:${op.account_id}`],

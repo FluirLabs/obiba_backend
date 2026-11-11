@@ -10,6 +10,7 @@ const decimals = z.number().int().min(0).max(24);
 const uuid = z.string().uuid();
 
 const deposit = z.object({ depositId: uuid, origin: label, amount: decimal.nullable(), at: iso });
+const moneyRequest = z.object({ requestId: z.string().regex(/^[0-9a-f]{32}$/), name: label, handle: z.string().regex(/^[a-z0-9_]{3,24}$/).nullable(), units, decimals, currency: label, note: z.string().min(1).max(80).regex(/^[^\r\n]+$/).nullable(), firstTime: z.boolean(), at: iso });
 const withdrawal = z.object({ withdrawalId: uuid, units, decimals, currency: label, destination: label, recipient: z.string().min(2).max(100), received: decimal.nullable(), at: iso });
 
 export const EMAIL_SCHEMAS: { [K in EmailKind]: z.ZodType<EmailPayloads[K]> } = {
@@ -28,6 +29,9 @@ export const EMAIL_SCHEMAS: { [K in EmailKind]: z.ZodType<EmailPayloads[K]> } = 
   WITHDRAWAL_COMPLETED: withdrawal,
   WITHDRAWAL_REVIEW: withdrawal,
   WITHDRAWAL_FAILED: withdrawal.extend({ refunded: z.boolean() }),
+  MONEY_REQUESTED: moneyRequest,
+  MONEY_REQUEST_PAID: moneyRequest,
+  MONEY_REQUEST_DECLINED: moneyRequest,
 };
 
 export function isEmailKind(kind: string): kind is EmailKind {

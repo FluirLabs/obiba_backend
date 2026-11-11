@@ -1,4 +1,4 @@
-import type { EmailKind, EmailPayloads, WithdrawalFacts } from '@obiba/domain';
+import type { EmailKind, EmailPayloads, MoneyRequestFacts, WithdrawalFacts } from '@obiba/domain';
 import type { Block, Brand, Category, EmailDoc, RenderedEmail, Row } from './design';
 import { render } from './design';
 import { formatDecimal, formatTime, formatUnits, maskAddress, reference } from './format';
@@ -52,6 +52,20 @@ function withdrawalRows(w: WithdrawalFacts, status: Row, received: boolean): Row
 
 function hero(w: WithdrawalFacts, style: 'soft' | 'plain', eyebrow: string, sub: string): Block {
   return { t: 'hero', style, eyebrow, amount: formatUnits(w.units, w.decimals), unit: w.currency, sub };
+}
+
+function who(r: MoneyRequestFacts): string {
+  return r.handle ? `${r.name} (@${r.handle})` : r.name;
+}
+
+function requestRows(r: MoneyRequestFacts, label: string, status: Row): Row[] {
+  return defined([
+    status,
+    { label, value: who(r) },
+    r.note ? { label: 'For', value: r.note } : null,
+    { label: 'Reference', value: reference(r.requestId) },
+    { label: 'Date', value: formatTime(r.at) },
+  ]);
 }
 
 const VIEW = 'View in Obiba';
@@ -229,6 +243,40 @@ export const BUILDERS: Builders = {
       { t: 'p', text: w.refunded ? `Your withdrawal of ${formatUnits(w.units, w.decimals)} ${w.currency} could not be delivered, so it was returned to your Obiba account.` : `Your withdrawal of ${formatUnits(w.units, w.decimals)} ${w.currency} did not go through. The amount was not sent to the destination, and any hold on your balance has been released.` },
       { t: 'rows', rows: withdrawalRows(w, { label: 'Status', value: w.refunded ? 'Refunded' : 'Failed', tone: w.refunded ? 'neutral' : 'critical' }, false) },
       { t: 'cta', label: VIEW, href: open(ctx, '/activity') },
+    ]),
+
+  MONEY_REQUESTED: (r, ctx) =>
+    r.firstTime
+      ? doc(`${r.name} wants to request money from you`, 'Allowing a request does not pay it.', 'Update', [
+          { t: 'hero', style: 'soft', eyebrow: 'First request', amount: formatUnits(r.units, r.decimals), unit: r.currency, sub: `From ${who(r)}` },
+          { t: 'p', text: `${who(r)} has not requested money from you before. Open Obiba to allow this request, allow it once, or block them.` },
+          { t: 'p', text: 'Allowing a request only lets you review it. It does not pay anything. You decide whether to pay as a separate step.' },
+          { t: 'rows', rows: requestRows(r, 'From', { label: 'Status', value: 'Waiting for your permission', tone: 'caution' }) },
+          { t: 'cta', label: 'Review request', href: open(ctx, `/requests/pay?id=${r.requestId}`) },
+          { t: 'notice', title: 'Only pay people you know', body: 'Obiba will never ask you to pay a request. If you do not know this person, block them.' },
+        ])
+      : doc(`${r.name} requested ${formatUnits(r.units, r.decimals)} ${r.currency}`, 'Review it in Obiba, then pay or decline.', 'Update', [
+      { t: 'hero', style: 'soft', eyebrow: 'Money request', amount: formatUnits(r.units, r.decimals), unit: r.currency, sub: `Requested by ${who(r)}` },
+      { t: 'p', text: `${who(r)} asked you for ${formatUnits(r.units, r.decimals)} ${r.currency}${r.note ? ` for "${r.note}"` : ''}. Nothing is paid until you approve it in Obiba.` },
+      { t: 'rows', rows: requestRows(r, 'From', { label: 'Status', value: 'Waiting for you', tone: 'caution' }) },
+      { t: 'cta', label: 'Review and pay', href: open(ctx, `/requests/pay?id=${r.requestId}`) },
+      { t: 'notice', title: 'Do not know this person?', body: 'Decline the request in Obiba. You can also block them so they cannot request money from you again.' },
+    ]),
+
+  MONEY_REQUEST_PAID: (r, ctx) =>
+    doc(`${r.name} paid your request: ${formatUnits(r.units, r.decimals)} ${r.currency}`, 'The money is in your Obiba account.', 'Receipt', [
+      { t: 'hero', style: 'solid', eyebrow: 'Request paid', amount: `+${formatUnits(r.units, r.decimals)}`, unit: r.currency, sub: `Paid by ${who(r)}` },
+      { t: 'p', text: `${who(r)} paid your request. The money is in your Obiba account and ready to use.` },
+      { t: 'rows', rows: requestRows(r, 'Paid by', { label: 'Status', value: 'Paid', tone: 'positive' }) },
+      { t: 'cta', label: VIEW, href: open(ctx, '/requests') },
+    ]),
+
+  MONEY_REQUEST_DECLINED: (r, ctx) =>
+    doc(`${r.name} declined your request`, `Your request for ${formatUnits(r.units, r.decimals)} ${r.currency} was declined.`, 'Update', [
+      { t: 'title', eyebrow: 'Request declined', text: `${r.name} declined your request.` },
+      { t: 'p', text: `Your request for ${formatUnits(r.units, r.decimals)} ${r.currency} was declined. No money moved.` },
+      { t: 'rows', rows: requestRows(r, 'Asked', { label: 'Status', value: 'Declined', tone: 'neutral' }) },
+      { t: 'cta', label: VIEW, href: open(ctx, '/requests') },
     ]),
 };
 
