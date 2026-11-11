@@ -28,6 +28,7 @@ interface RequestRow {
   created_at: Date;
   updated_at: Date;
   permission: string;
+  earlier_requests: number;
 }
 
 interface FactsRow {
@@ -101,6 +102,7 @@ function view(r: RequestRow): MoneyRequestView {
     createdAt: new Date(r.created_at).toISOString(),
     updatedAt: new Date(r.updated_at).toISOString(),
     permission: r.permission,
+    earlierRequests: r.earlier_requests,
   };
 }
 

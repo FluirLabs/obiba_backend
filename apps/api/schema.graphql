@@ -229,6 +229,7 @@ type MoneyRequestView {
   counterpartyName: String!
   createdAt: String!
   direction: String!
+  earlierRequests: Int!
   note: String
   paying: Boolean!
   permission: String!

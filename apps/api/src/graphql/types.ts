@@ -166,6 +166,7 @@ export class MoneyRequestView {
   @Field() createdAt!: string;
   @Field() updatedAt!: string;
   @Field() permission!: string;
+  @Field(() => Int) earlierRequests!: number;
 }
 
 @ObjectType()
