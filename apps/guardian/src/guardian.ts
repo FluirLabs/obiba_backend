@@ -18,10 +18,6 @@ export interface UserTokenVerifier {
 export interface GuardianPolicy {
   networkId: string;
   tokens: TokenSpec[];
-  maxCosignUsd: bigint;
-  dailyCosignUsd: bigint;
-  maxDailyLimitUsd?: bigint;
-  maxCosignsPerHour: number;
   stepUpMaxAgeSeconds: number;
 }
 
@@ -35,13 +31,9 @@ interface ChainPolicy {
   guardian_nonce: string;
   devices: string[];
   recovery: unknown;
-  effective_daily_limit?: string;
-  max_op_amount?: string;
-  pending_limit?: unknown;
   frozen_until_ns?: string;
 }
 
-const LIMIT_RAISE_COOLDOWN = '24 hours';
 const MAX_DEVICES = 5;
 const MAX_DEVICE_ADDS_PER_DAY = 3;
 const DEVICE_CHANGE_MAX_AGE_SECONDS = 300;
@@ -90,11 +82,10 @@ export class Guardian {
     const age = Math.floor(this.now() / 1000) - identity.authTime;
     rules.identity_matches = identity.uid === op.uid;
     rules.email_verified = identity.emailVerified;
-    rules.fresh_second_factor = isSecondFactor(identity.secondFactor) && age >= 0 && age <= this.policy.stepUpMaxAgeSeconds;
+    rules.fresh_sign_in = age >= 0 && age <= this.policy.stepUpMaxAgeSeconds;
     rules.op_pending = op.status === 'PREPARED';
     rules.op_not_expired = BigInt(o.expires_at_ns) > BigInt(this.now()) * 1_000_000n + 60_000_000_000n;
     rules.known_token = decimals !== undefined;
-    rules.within_single_cap = usd <= this.policy.maxCosignUsd;
     rules.no_recent_support_recovery = await this.noRecentSupportRecovery(op.uid);
 
     const devices = await this.pool.query<{ public_key: string }>("select public_key from identity.devices where uid = $1 and status = 'active'", [op.uid]);
@@ -109,17 +100,6 @@ export class Guardian {
     } else {
       rules.device_key_on_chain = false;
     }
-
-    const recent = await this.pool.query<{ n: string; total: string | null }>(
-      "select count(*)::text as n, sum(usd)::text as total from ops.guardian_decisions where uid = $1 and outcome = 'SIGNED' and decided_at > now() - interval '24 hours'",
-      [op.uid],
-    );
-    const lastHour = await this.pool.query<{ n: string }>(
-      "select count(*)::text as n from ops.guardian_decisions where uid = $1 and outcome = 'SIGNED' and decided_at > now() - interval '1 hour'",
-      [op.uid],
-    );
-    rules.within_velocity = Number(lastHour.rows[0]!.n) < this.policy.maxCosignsPerHour;
-    rules.within_daily_cap = BigInt(recent.rows[0]!.total ?? '0') + usd <= this.policy.dailyCosignUsd;
 
     const failed = Object.entries(rules).filter(([, v]) => !v).map(([k]) => k);
     if (failed.length > 0) return this.refuse(opId, op.uid, usd, failed.join(','), rules);
@@ -209,62 +189,6 @@ export class Guardian {
     });
     const signature = Buffer.from(await this.signer.sign(sha256(preimage))).toString('base64');
     await this.pool.query("insert into ops.guardian_decisions(op_id, uid, usd, outcome, rules) values ($1, $2, 0, 'SIGNED', $3)", [ref, rec.uid, JSON.stringify(rules)]);
-    return { ok: true, signature, guardianNonce };
-  }
-
-  async raiseLimit(callId: string, idToken: string): Promise<RecoveryResult> {
-    if (!/^[0-9a-f]{32}$/.test(callId)) return { ok: false, reason: 'bad_request' };
-    const ref = `limit:${callId}`;
-    const call = (
-      await this.pool.query<{ uid: string; account_id: string; method: string; args_b64: string; status: string }>(
-        'select uid, account_id, method, args_b64, status from ops.account_calls where call_id = $1',
-        [callId],
-      )
-    ).rows[0];
-    if (!call) return this.refuse(ref, null, 0n, 'unknown_call');
-    let args: { new_limit?: unknown; guardian_sig?: unknown };
-    try {
-      args = JSON.parse(Buffer.from(call.args_b64, 'base64').toString()) as typeof args;
-    } catch {
-      return this.refuse(ref, call.uid, 0n, 'bad_args');
-    }
-    const newLimit = typeof args.new_limit === 'string' && /^[1-9]\d{0,30}$/.test(args.new_limit) ? BigInt(args.new_limit) : null;
-    const rules: Record<string, boolean> = {};
-    let identity: GuardianIdentity;
-    try {
-      identity = await this.users.verify(idToken);
-    } catch {
-      return this.refuse(ref, call.uid, 0n, 'identity_invalid');
-    }
-    const age = Math.floor(this.now() / 1000) - identity.authTime;
-    rules.identity_matches = identity.uid === call.uid;
-    rules.email_verified = identity.emailVerified;
-    rules.fresh_second_factor = isSecondFactor(identity.secondFactor) && age >= 0 && age <= this.policy.stepUpMaxAgeSeconds;
-    rules.call_pending = call.status === 'PREPARED' && call.method === 'set_limit' && args.guardian_sig === null;
-    rules.limit_valid = newLimit !== null;
-    rules.within_limit_cap = newLimit !== null && newLimit <= (this.policy.maxDailyLimitUsd ?? this.policy.dailyCosignUsd);
-    rules.no_recent_support_recovery = await this.noRecentSupportRecovery(call.uid);
-    const recent = await this.pool.query<{ n: string }>(
-      "select count(*)::text as n from ops.guardian_decisions where uid = $1 and outcome = 'SIGNED' and op_id like 'limit:%' and decided_at > now() - $2::interval",
-      [call.uid, LIMIT_RAISE_COOLDOWN],
-    );
-    rules.within_raise_cooldown = recent.rows[0]!.n === '0';
-    let chain: ChainPolicy | null = null;
-    try {
-      chain = await this.rpc.view<ChainPolicy>(call.account_id, 'get_policy', {});
-    } catch {
-      chain = null;
-    }
-    rules.chain_readable = chain !== null;
-    rules.is_raise = chain !== null && newLimit !== null && newLimit > BigInt(chain.effective_daily_limit ?? '0');
-    rules.within_contract_bound = chain !== null && newLimit !== null && newLimit <= BigInt(chain.max_op_amount ?? '0') * 24n;
-    rules.not_frozen = chain !== null && BigInt(chain.frozen_until_ns ?? '0') <= BigInt(this.now()) * 1_000_000n;
-    const failed = Object.entries(rules).filter(([, v]) => !v).map(([k]) => k);
-    if (failed.length > 0 || !chain || newLimit === null) return this.refuse(ref, call.uid, 0n, failed.join(',') || 'chain', rules);
-    const guardianNonce = String(chain.guardian_nonce);
-    const preimage = guardianPreimage(this.policy.networkId, call.account_id, { purpose: 'RaiseLimit', payload: { new_limit: newLimit.toString(), guardian_nonce: guardianNonce } });
-    const signature = Buffer.from(await this.signer.sign(sha256(preimage))).toString('base64');
-    await this.pool.query("insert into ops.guardian_decisions(op_id, uid, usd, outcome, rules) values ($1, $2, $3, 'SIGNED', $4)", [ref, call.uid, newLimit.toString(), JSON.stringify(rules)]);
     return { ok: true, signature, guardianNonce };
   }
 

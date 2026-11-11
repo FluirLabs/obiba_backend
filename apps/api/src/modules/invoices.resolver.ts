@@ -2,7 +2,7 @@ import { Inject } from '@nestjs/common';
 import { Args, Context, Field, ID, InputType, Int, Mutation, ObjectType, Query, Resolver } from '@nestjs/graphql';
 import type { Pool } from 'pg';
 import { withTx, withUserTx } from '@obiba/db';
-import { invoicePreimage, isHexId, newHexId, sha256, USDC_DECIMALS, type Invoice, type Op } from '@obiba/domain';
+import { invoicePreimage, isHexId, newHexId, sha256, UNCAPPED_USD, USDC_DECIMALS, type Invoice, type Op } from '@obiba/domain';
 import { OneClickClient, OneClickError, checkSignedQuote, validRefundAddress, type OriginAsset, type QuoteRequest } from '@obiba/intents';
 import { APP_CONFIG, appOrigin, explorerTxUrl, type AppConfig } from '../config';
 import { appError } from '../errors';
@@ -105,7 +105,7 @@ export class InvoicesResolver {
   @KillSwitch('invoices')
   async createInvoice(@Context('req') req: ObibaRequest, @Args('input') input: CreateInvoiceInput): Promise<CreatedInvoice> {
     const { uid } = identityOf(req);
-    const units = amount(input.amount, USDC_DECIMALS, this.config.MAX_OP_AMOUNT);
+    const units = amount(input.amount, USDC_DECIMALS, UNCAPPED_USD);
     if (!Number.isInteger(input.expiresInMinutes) || input.expiresInMinutes < 1 || input.expiresInMinutes > 60) {
       throw appError('BAD_INPUT', 'expiresInMinutes');
     }

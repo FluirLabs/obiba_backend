@@ -3,7 +3,6 @@ import { parseTokenSpecs } from '@obiba/domain';
 
 const csv = z.string().transform((v) => v.split(',').map((s) => s.trim()).filter(Boolean));
 const yocto = z.string().regex(/^[1-9]\d{0,30}$/).transform(BigInt);
-const usd = z.string().regex(/^[1-9]\d{0,20}$/).transform(BigInt);
 const account = z.string().regex(/^[a-z0-9._-]{2,64}$/);
 const pk = z.string().regex(/^ed25519:[1-9A-HJ-NP-Za-km-z]{43,44}$/);
 const MAX_ACCOUNT_FLOAT_YOCTO = 10n ** 21n;
@@ -20,8 +19,6 @@ const Schema = z
     PAY_CONTRACT: account,
     TOKENS: z.string().transform(parseTokenSpecs),
     GUARDIAN_PUBLIC_KEY: pk,
-    DAILY_LIMIT_USD: usd,
-    MAX_OP_USD: usd,
     ACCOUNT_FUNDING_YOCTO: yocto,
     DEVICE_ALLOWANCE_YOCTO: yocto,
     STORAGE_DEPOSIT_YOCTO: yocto,
@@ -81,7 +78,6 @@ const Schema = z
     if (!c.ACCOUNT_CODE_HASH && !c.ACCOUNT_WASM_PATH) fail('ACCOUNT_CODE_HASH or ACCOUNT_WASM_PATH is required');
     if (c.NEAR_NETWORK === 'mainnet' && !c.ACCOUNT_CODE_HASH) fail('mainnet accounts must reference the immutable global contract hash');
     if (c.ACCOUNT_FUNDING_YOCTO > MAX_ACCOUNT_FLOAT_YOCTO) fail('accounts are zero-balance; ACCOUNT_FUNDING_YOCTO is only the 1-yocto float for token calls');
-    if (c.DAILY_LIMIT_USD > c.MAX_OP_USD) fail('DAILY_LIMIT_USD cannot exceed MAX_OP_USD');
     if (c.FACTORY_ACCOUNT === c.RELAYER_ACCOUNT) fail('factory and relayer must be different accounts');
     if (c.NODE_ENV === 'production' && c.MAIL_MODE === 'log') fail('production must send recovery notifications by email');
     if (c.MAIL_MODE === 'resend' && !c.RESEND_API_KEY) fail('RESEND_API_KEY is required for resend');

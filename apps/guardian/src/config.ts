@@ -2,7 +2,6 @@ import { z } from 'zod';
 import { parseTokenSpecs } from '@obiba/domain';
 
 const csv = z.string().transform((v) => v.split(',').map((s) => s.trim()).filter(Boolean));
-const usd = z.string().regex(/^[1-9]\d{0,20}$/).transform(BigInt);
 
 const Schema = z
   .object({
@@ -34,10 +33,6 @@ const Schema = z
           return z.NEVER;
         }
       }),
-    MAX_COSIGN_USD: usd,
-    DAILY_COSIGN_USD: usd,
-    MAX_DAILY_LIMIT_USD: usd.optional(),
-    MAX_COSIGNS_PER_HOUR: z.coerce.number().int().min(1).max(100).default(3),
     STEP_UP_MAX_AGE_SECONDS: z.coerce.number().int().min(60).max(900).default(300),
     SIGNER: z.enum(['kms', 'local']),
     GUARDIAN_KMS_KEY: z.string().optional(),
@@ -49,7 +44,6 @@ const Schema = z
     if (c.NODE_ENV === 'production' && c.SIGNER !== 'kms') fail('production guardian must sign with Cloud KMS (HSM)');
     if (c.SIGNER === 'kms' && !c.GUARDIAN_KMS_KEY) fail('GUARDIAN_KMS_KEY is required');
     if (c.SIGNER === 'local' && !c.GUARDIAN_SEED_HEX) fail('GUARDIAN_SEED_HEX is required');
-    if (c.DAILY_COSIGN_USD < c.MAX_COSIGN_USD) fail('DAILY_COSIGN_USD must be at least MAX_COSIGN_USD');
     if (c.DEV_CALLER_TOKENS && (c.NODE_ENV === 'production' || c.NEAR_NETWORK === 'mainnet')) fail('DEV_CALLER_TOKENS is for local development only');
     if (c.SUPPORT_CALLERS.some((s) => c.ALLOWED_CALLERS.includes(s))) fail('SUPPORT_CALLERS must be different service accounts from ALLOWED_CALLERS');
   });

@@ -2,7 +2,7 @@ import { Inject } from '@nestjs/common';
 import { Args, Context, Mutation, Resolver } from '@nestjs/graphql';
 import type { Pool, PoolClient } from 'pg';
 import { withUserTx } from '@obiba/db';
-import { deviceOpPreimage, emailJob, enqueueEmail, newHexId, originLabel, sha256, USDC_DECIMALS, type Op } from '@obiba/domain';
+import { deviceOpPreimage, emailJob, enqueueEmail, isHexId, newHexId, originLabel, sha256, UNCAPPED_USD, USDC_DECIMALS, type Op } from '@obiba/domain';
 import { checkSignedDelegate } from '@obiba/near';
 import { APP_CONFIG, type AppConfig } from '../config';
 import { appError } from '../errors';
@@ -12,7 +12,7 @@ import { NearChain } from '../infra/near-chain';
 import { PG_POOL, REDIS } from '../infra/tokens';
 import type Redis from 'ioredis';
 import { switchedOff } from '../security/kill-switch';
-import { RateLimit, RequireStepUp } from '../security/decorators';
+import { RateLimit, RequireFreshSession } from '../security/decorators';
 import { GuardianClient } from '../infra/guardian-client';
 import { IdempotencyService } from '../security/idempotency';
 import { KillSwitch } from '../security/kill-switch';
@@ -52,13 +52,14 @@ export async function storePreparedOp(
   method: Canonical['method'],
   args: Record<string, unknown>,
   invoiceId: string | null,
+  moneyRequestId: string | null = null,
 ): Promise<PreparedOp> {
   const argsBytes = Buffer.from(JSON.stringify(args));
   const canonical: Canonical = { method, args_b64: argsBytes.toString('base64'), op };
   await c.query(
-    `insert into ops.prepared_ops(op_id, uid, account_id, kind, receiver, amount, expires_at_ns, canonical, needs_guardian, status, invoice_id)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, false, 'PREPARED', $9)`,
-    [op.op_id, uid, accountId, op.kind, op.receiver, op.amount, op.expires_at_ns, JSON.stringify(canonical), invoiceId],
+    `insert into ops.prepared_ops(op_id, uid, account_id, kind, receiver, amount, expires_at_ns, canonical, needs_guardian, status, invoice_id, money_request_id)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, false, 'PREPARED', $9, $10)`,
+    [op.op_id, uid, accountId, op.kind, op.receiver, op.amount, op.expires_at_ns, JSON.stringify(canonical), invoiceId, moneyRequestId],
   );
   return {
     opId: op.op_id,
@@ -85,7 +86,7 @@ export class PaymentsResolver {
   ) {}
 
   @Mutation(() => PreparedOp)
-  @RequireStepUp()
+  @RequireFreshSession()
   @RateLimit('money')
   @KillSwitch('transfers')
   async requestCosign(
@@ -153,9 +154,22 @@ export class PaymentsResolver {
     if ((field === 'toHandle' && query.by !== 'handle') || (field === 'toPhone' && query.by !== 'phone') || (field === 'toAccount' && query.by !== 'account')) {
       throw appError('BAD_INPUT', field);
     }
-    const units = amount(input.amount, USDC_DECIMALS, this.config.MAX_OP_AMOUNT);
+    const units = amount(input.amount, USDC_DECIMALS, UNCAPPED_USD);
+    const requestId = input.requestId ?? null;
+    if (requestId !== null && !isHexId(requestId)) throw appError('BAD_INPUT', 'requestId');
     return withUserTx(this.pool, uid, async (c) => {
       const accountId = await activeAccount(c, uid);
+      if (requestId !== null) {
+        const owed = await c.query<{ requester_account: string; amount: string }>(
+          "select requester_account, amount::text from ops.money_requests where request_id = $1 and payer_uid = $2 and status = 'PENDING'",
+          [requestId, uid],
+        );
+        const due = owed.rows[0];
+        if (!due) throw appError('CONFLICT', 'requestId');
+        if (field !== 'toAccount' || query.value !== due.requester_account || units.toString() !== due.amount) throw appError('BAD_INPUT', 'requestId');
+        const inFlight = await c.query("select 1 from ops.prepared_ops where money_request_id = $1 and status in ('SUBMITTED', 'RELAYED', 'UNKNOWN', 'SETTLED')", [requestId]);
+        if (inFlight.rowCount) throw appError('CONFLICT', 'requestId');
+      }
       const found = await resolveRecipient(c, this.chain, this.config, query);
       if (!found) throw appError(query.by === 'account' ? 'BAD_INPUT' : 'NOT_FOUND', field);
       const receiver = found.accountId;
@@ -180,7 +194,7 @@ export class PaymentsResolver {
         expires_at_ns: (nowNs() + OP_TTL_NS).toString(),
         memo: null,
       };
-      return storePreparedOp(c, this.config, uid, accountId, op, 'execute', { op, guardian_sig: null }, null);
+      return storePreparedOp(c, this.config, uid, accountId, op, 'execute', { op, guardian_sig: null }, null, requestId);
     });
   }
 

@@ -9,7 +9,6 @@ export type RecoveryResponse = { ok: true; signature: string; guardianNonce: str
 export abstract class GuardianClient {
   abstract cosign(opId: string, deviceSignature: string, idToken: string): Promise<CosignResponse>;
   abstract recovery(recoveryId: string, idToken: string, kitSignature: string | null): Promise<RecoveryResponse>;
-  abstract raiseLimit(callId: string, idToken: string): Promise<RecoveryResponse>;
   abstract deviceChange(callId: string, idToken: string): Promise<RecoveryResponse>;
 }
 
@@ -54,18 +53,6 @@ export class HttpGuardianClient extends GuardianClient {
       url: `${this.config.GUARDIAN_URL}/v1/recovery`,
       method: 'POST',
       data: { recovery_id: recoveryId, id_token: idToken, kit_signature: kitSignature },
-      timeout: 10_000,
-    });
-    return res.data;
-  }
-
-  async raiseLimit(callId: string, idToken: string): Promise<RecoveryResponse> {
-    if (!this.config.GUARDIAN_URL || !this.config.GUARDIAN_AUDIENCE) throw new Error('guardian not configured');
-    const client = await this.client();
-    const res = await client.request<RecoveryResponse>({
-      url: `${this.config.GUARDIAN_URL}/v1/limit`,
-      method: 'POST',
-      data: { call_id: callId, id_token: idToken },
       timeout: 10_000,
     });
     return res.data;

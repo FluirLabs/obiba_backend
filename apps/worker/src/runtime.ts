@@ -6,7 +6,7 @@ import Redis from 'ioredis';
 import pino, { type Logger } from 'pino';
 import type { Pool } from 'pg';
 import { createPool } from '@obiba/db';
-import { INGEST_QUEUE, MAIL_QUEUE, MAIN_QUEUE, TOPICS, killSwitchKey, type KillSwitchName, type AccountCallJob, type NotifyEmailJob, type ProvisionJob, type RecoveryJob, type RelayJob } from '@obiba/domain';
+import { INGEST_QUEUE, MAIL_QUEUE, MAIN_QUEUE, TOPICS, killSwitchKey, UNCAPPED_USD, type KillSwitchName, type AccountCallJob, type NotifyEmailJob, type ProvisionJob, type RecoveryJob, type RelayJob } from '@obiba/domain';
 import { FastNearTxIndex, KmsSigner, LocalSigner, NearRpc, RedisNonceSource, StorageSponsor, TX_INDEX_URLS, type ExpectedCode, type Signer } from '@obiba/near';
 import { base58 } from '@scure/base';
 import type { WorkerConfig } from './config';
@@ -103,8 +103,8 @@ export class WorkerRuntime {
         networkId: cfg.NEAR_NETWORK,
         tokens: cfg.TOKENS,
         guardianPublicKey: cfg.GUARDIAN_PUBLIC_KEY,
-        dailyLimitUsd: cfg.DAILY_LIMIT_USD,
-        maxOpAmountUsd: cfg.MAX_OP_USD,
+        dailyLimitUsd: UNCAPPED_USD,
+        maxOpAmountUsd: UNCAPPED_USD,
         fundingYocto: cfg.ACCOUNT_FUNDING_YOCTO,
         deviceAllowanceYocto: cfg.DEVICE_ALLOWANCE_YOCTO,
         storageDepositYocto: cfg.STORAGE_DEPOSIT_YOCTO,

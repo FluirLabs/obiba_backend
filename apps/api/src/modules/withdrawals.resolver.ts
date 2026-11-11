@@ -2,7 +2,7 @@ import { Inject } from '@nestjs/common';
 import { Args, Context, Field, ID, InputType, Int, Mutation, ObjectType, Query, Resolver } from '@nestjs/graphql';
 import type { Pool } from 'pg';
 import { withUserTx } from '@obiba/db';
-import { isNearAccountId, newHexId, USDC_DECIMALS, type Op } from '@obiba/domain';
+import { isNearAccountId, newHexId, UNCAPPED_USD, USDC_DECIMALS, type Op } from '@obiba/domain';
 import {
   MAINNET_DESTINATIONS,
   OneClickClient,
@@ -126,7 +126,7 @@ export class WithdrawalsResolver {
     const dest = this.destinations.get(input.destination);
     if (!dest) throw appError('BAD_INPUT', 'destination');
     if (!validRefundAddress(dest.chain, input.recipientAddress)) throw appError('BAD_INPUT', 'recipientAddress');
-    const units = amount(input.amount, USDC_DECIMALS, this.config.MAX_OP_AMOUNT);
+    const units = amount(input.amount, USDC_DECIMALS, UNCAPPED_USD);
     const accountId = await withUserTx(this.pool, uid, (c) => activeAccount(c, uid));
     const originAsset = `nep141:${this.config.USDC_CONTRACT}`;
     const body: QuoteRequest = {

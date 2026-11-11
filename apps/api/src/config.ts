@@ -22,7 +22,6 @@ const Schema = z
     USDC_LEGACY_CONTRACTS: csv.pipe(z.array(z.string().min(2).max(64)).max(3)).default([]),
     PAY_CONTRACT: z.string().min(2).max(64),
     ACCOUNT_SUFFIX: z.string().regex(/^\.[a-z0-9.-]+$/),
-    MAX_OP_AMOUNT: z.string().regex(/^[1-9]\d{0,20}$/).transform(BigInt),
     INVOICE_FEE_BPS: z.coerce.number().int().min(0).max(100),
     INVOICE_SIGNER: z.enum(['kms', 'local']),
     INVOICE_KMS_KEY: z.string().optional(),

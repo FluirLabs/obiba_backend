@@ -1,4 +1,5 @@
 export const USDC_DECIMALS = 6;
+export const UNCAPPED_USD = 10n ** 18n;
 export const U128_MAX = (1n << 128n) - 1n;
 
 const DECIMAL = /^(0|[1-9]\d*)(\.\d+)?$/;

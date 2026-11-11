@@ -82,6 +82,12 @@ input CreateInvoiceInput {
   reference: String
 }
 
+input CreateMoneyRequestInput {
+  amount: String!
+  note: String
+  toHandle: String!
+}
+
 type CreatedInvoice {
   amount: String!
   expiresAtNs: String!
@@ -136,6 +142,13 @@ type DirectDeposit {
   network: String!
   token: String!
   tokenContract: String!
+}
+
+type HandleAvailability {
+  available: Boolean!
+  handle: String!
+  reason: String
+  suggestions: [String!]!
 }
 
 type IndicativeRate {
@@ -209,20 +222,37 @@ type MerchantInvoice {
   status: String!
 }
 
+type MoneyRequestView {
+  amount: String!
+  counterpartyAccount: String
+  counterpartyHandle: String
+  counterpartyName: String!
+  createdAt: String!
+  direction: String!
+  note: String
+  paying: Boolean!
+  requestId: ID!
+  status: String!
+  updatedAt: String!
+}
+
 type Mutation {
   beginViewOnlySession: Boolean!
   buildDelegate(input: BuildDelegateInput!): UnsignedDelegateView!
+  cancelMoneyRequest(requestId: String!): String!
   cancelRecovery(signedDelegate: String!): RecoveryView!
   cancelSupportRecovery: SupportCaseView!
+  changeHandle(handle: String!): Me!
   confirmPhone: Boolean!
   confirmSupportRecovery(newPublicKey: String!, token: String!): SupportRequestReceipt!
   createAccount(input: CreateAccountInput!): Boolean!
   createInvoice(input: CreateInvoiceInput!): CreatedInvoice!
+  createMoneyRequest(input: CreateMoneyRequestInput!): MoneyRequestView!
+  declineMoneyRequest(requestId: String!): String!
   markNotificationsRead(upToId: String!): Int!
   openSupportRecovery(newPublicKey: String!): SupportCaseView!
   prepareInternalTestPayment(input: SandboxRequestInput!): InternalTestPayment!
   prepareInvoicePayment(invoiceId: String!): PreparedOp!
-  prepareLimitChange(newLimit: String!): AccountCall!
   prepareTokenEnable(token: String!): AccountCall!
   prepareTransfer(input: PrepareTransferInput!): PreparedOp!
   prepareWithdrawal(input: PrepareWithdrawalInput!): PreparedWithdrawal!
@@ -232,7 +262,6 @@ type Mutation {
   registerProfile(input: RegisterProfileInput!): Me!
   registerRecoveryKit(devicePublicKey: String!, deviceSignature: String!, kitPublicKey: String!): RecoveryKitStatus!
   requestCosign(deviceSignature: String!, opId: String!): PreparedOp!
-  requestLimitRaise(newLimit: String!): AccountCall!
   requestPasswordReset(email: String!): Boolean!
   requestSupportRecovery(email: String!, newPhone: String!): Boolean!
   sandboxSubmit(input: SandboxRequestInput!): SandboxReceiptView!
@@ -278,6 +307,7 @@ type PendingItem {
 
 input PrepareTransferInput {
   amount: String!
+  requestId: String
   toAccount: String
   toHandle: String
   toPhone: String
@@ -319,12 +349,14 @@ type Query {
   deposits(first: Int! = 20): [DepositInstructions!]!
   devices: [DeviceView!]!
   directDeposit: DirectDeposit!
+  handleAvailability(handle: String!): HandleAvailability!
   indicativeRate: IndicativeRate
   invoice(invoiceId: String!): InvoiceView
   invoicePayOptions: [DepositOption!]!
   invoicePayment(paymentId: String!): InvoicePayment
   me: Me!
   merchantInvoices(before: String, first: Int! = 20): [MerchantInvoice!]!
+  moneyRequests(first: Int! = 50): [MoneyRequestView!]!
   notifications(first: Int! = 20): [NotificationView!]!
   op(opId: String!): OpView
   pendingActivity: [PendingItem!]!

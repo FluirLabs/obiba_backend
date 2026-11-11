@@ -2,7 +2,7 @@ import { Inject } from '@nestjs/common';
 import { Args, Context, Field, ID, InputType, Int, Mutation, ObjectType, Query, Resolver } from '@nestjs/graphql';
 import type { Pool } from 'pg';
 import { withUserTx } from '@obiba/db';
-import { ed25519KeyBytes, guardianPreimage, isHexId, newHexId, parseDecimal, sha256, USDC_DECIMALS, verifyEd25519, MoneyError } from '@obiba/domain';
+import { ed25519KeyBytes, guardianPreimage, isHexId, newHexId, sha256, USDC_DECIMALS, verifyEd25519 } from '@obiba/domain';
 import { assembleSignedDelegate, buildUnsignedDelegate, checkSignedDelegate } from '@obiba/near';
 import { APP_CONFIG, explorerAccountUrl, type AppConfig } from '../config';
 import { appError } from '../errors';
@@ -11,7 +11,7 @@ import { GuardianClient } from '../infra/guardian-client';
 import { localGuardianSign } from '../infra/local-guardian';
 import { NearChain } from '../infra/near-chain';
 import { PG_POOL } from '../infra/tokens';
-import { RateLimit, RequireFreshSession, RequireStepUp } from '../security/decorators';
+import { RateLimit, RequireFreshSession } from '../security/decorators';
 import { IdTokenVerifier } from '../security/identity';
 import { identityOf, type ObibaRequest } from '../security/request';
 import { activeAccount } from './payments.resolver';
@@ -102,17 +102,6 @@ export interface CallRow {
   status: string;
 }
 
-function usdUnitsOf(value: string): bigint {
-  try {
-    const v = parseDecimal(value, 6);
-    if (v <= 0n) throw appError('BAD_INPUT', 'newLimit');
-    return v;
-  } catch (err) {
-    if (err instanceof MoneyError) throw appError('BAD_INPUT', 'newLimit');
-    throw err;
-  }
-}
-
 export function callView(c: CallRow): AccountCall {
   const args = JSON.parse(Buffer.from(c.args_b64, 'base64').toString()) as { new_limit?: string; token?: string };
   return { callId: c.call_id, accountId: c.account_id, methodName: c.method, argsBase64: c.args_b64, status: c.status, newLimit: args.new_limit ?? null, token: args.token ?? null, effectiveAt: null };
@@ -201,55 +190,6 @@ export class SigningResolver {
     }
   }
 
-  @Mutation(() => AccountCall)
-  @RateLimit('quote')
-  async prepareLimitChange(@Context('req') req: ObibaRequest, @Args('newLimit') newLimit: string): Promise<AccountCall> {
-    const { uid } = identityOf(req);
-    const units = usdUnitsOf(newLimit);
-    const accountId = await withUserTx(this.pool, uid, (c) => activeAccount(c, uid));
-    let current: bigint;
-    try {
-      current = BigInt((await this.chain.policy(accountId)).effective_daily_limit);
-    } catch {
-      throw appError('SERVICE_PAUSED');
-    }
-    if (units > current) throw appError('STEP_UP_REQUIRED', 'newLimit');
-    return this.storeCall(uid, accountId, { new_limit: units.toString(), guardian_sig: null, guardian_nonce: null });
-  }
-
-  @Mutation(() => AccountCall)
-  @RequireStepUp()
-  @RateLimit('money')
-  async requestLimitRaise(@Context('req') req: ObibaRequest, @Args('newLimit') newLimit: string): Promise<AccountCall> {
-    const { uid } = identityOf(req);
-    const units = usdUnitsOf(newLimit);
-    const idToken = /^Bearer (\S+)$/.exec(req.headers.authorization ?? '')?.[1];
-    if (!idToken) throw appError('UNAUTHENTICATED');
-    const accountId = await withUserTx(this.pool, uid, (c) => activeAccount(c, uid));
-    const call = await this.storeCall(uid, accountId, { new_limit: units.toString(), guardian_sig: null, guardian_nonce: null });
-    let result;
-    try {
-      result = await this.guardian.raiseLimit(call.callId, idToken);
-    } catch {
-      result = { ok: false as const, reason: 'guardian_unavailable' };
-    }
-    return withUserTx(this.pool, uid, async (c) => {
-      if (!result.ok) {
-        await c.query("update ops.account_calls set status = 'FAILED', updated_at = now() where call_id = $1", [call.callId]);
-        await this.audit.record({ actor: uid, action: 'limit.raise', target: call.callId, outcome: 'DENIED', requestId: req.requestId, details: { reason: result.reason.slice(0, 200) } }, c);
-        throw appError('FORBIDDEN', 'newLimit');
-      }
-      if (!/^\d{1,20}$/.test(result.guardianNonce) || !/^[A-Za-z0-9+/]{86}==$/.test(result.signature)) throw appError('SERVICE_PAUSED');
-      const args = Buffer.from(JSON.stringify({ new_limit: units.toString(), guardian_sig: result.signature, guardian_nonce: result.guardianNonce })).toString('base64');
-      const r = await c.query<CallRow>(
-        "update ops.account_calls set args_b64 = $2, updated_at = now() where call_id = $1 and status = 'PREPARED' returning call_id, account_id, method, args_b64, status",
-        [call.callId, args],
-      );
-      await this.audit.record({ actor: uid, action: 'limit.raise', target: call.callId, outcome: 'ALLOWED', requestId: req.requestId }, c);
-      return { ...callView(r.rows[0]!), effectiveAt: new Date(Date.now() + 24 * 3600 * 1000).toISOString() };
-    });
-  }
-
   @Query(() => [String])
   @RateLimit('quote')
   async tokensToEnable(@Context('req') req: ObibaRequest): Promise<string[]> {
@@ -278,16 +218,16 @@ export class SigningResolver {
     const digest = sha256(guardianPreimage(this.config.NEAR_NETWORK, accountId, { purpose: 'AddToken', payload: { token, decimals: USDC_DECIMALS, guardian_nonce: guardianNonce } }));
     const signature = localGuardianSign(seed, digest);
     if (!verifyEd25519(policy.guardian, digest, signature)) throw appError('SERVICE_PAUSED');
-    const call = await this.storeCall(uid, accountId, { token, decimals: USDC_DECIMALS, guardian_sig: signature.toString('base64'), guardian_nonce: guardianNonce }, 'add_token');
+    const call = await this.storeCall(uid, accountId, { token, decimals: USDC_DECIMALS, guardian_sig: signature.toString('base64'), guardian_nonce: guardianNonce });
     await this.audit.record({ actor: uid, action: 'token.enable', target: call.callId, outcome: 'ALLOWED', requestId: req.requestId, details: { token } });
     return call;
   }
 
-  private async storeCall(uid: string, accountId: string, args: Record<string, unknown>, method: 'set_limit' | 'add_token' = 'set_limit'): Promise<AccountCall> {
+  private async storeCall(uid: string, accountId: string, args: Record<string, unknown>): Promise<AccountCall> {
     return withUserTx(this.pool, uid, async (c) => {
       const r = await c.query<CallRow>(
         "insert into ops.account_calls(call_id, uid, account_id, method, args_b64, status) values ($1, $2, $3, $4, $5, 'PREPARED') returning call_id, account_id, method, args_b64, status",
-        [newHexId(), uid, accountId, method, Buffer.from(JSON.stringify(args)).toString('base64')],
+        [newHexId(), uid, accountId, 'add_token', Buffer.from(JSON.stringify(args)).toString('base64')],
       );
       return callView(r.rows[0]!);
     });

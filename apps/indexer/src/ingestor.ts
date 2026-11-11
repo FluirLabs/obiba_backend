@@ -256,6 +256,10 @@ export class Ingestor {
         await c.query('select ledger.close_hold($1, $2)', [`op:${opId}`, settled ? 'CAPTURED' : 'RELEASED']);
         if (!settled && row.invoice_id) await c.query('select ops.release_invoice($1)', [row.invoice_id]);
         if (!settled) await this.settleInternalTest(c, { opId }, 'FAILED', null, notices);
+        if (settled) {
+          const requester = (await c.query<{ uid: string | null }>('select ops.settle_money_request($1) as uid', [opId])).rows[0]?.uid;
+          if (requester) notices.push({ uid: requester, kind: 'invoice', id: opId, status: 'PAID' });
+        }
         notices.push({ uid: row.uid, kind: 'op', id: opId, status });
       }
       return;

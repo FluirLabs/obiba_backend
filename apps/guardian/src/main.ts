@@ -17,10 +17,6 @@ async function main() {
   const guardian = new Guardian(pool, new NearRpc(cfg.NEAR_RPC_URLS), signer, new FirebaseUserVerifier(cfg.IDP_PROJECT_ID), {
     networkId: cfg.NEAR_NETWORK,
     tokens: cfg.TOKENS,
-    maxCosignUsd: cfg.MAX_COSIGN_USD,
-    dailyCosignUsd: cfg.DAILY_COSIGN_USD,
-    maxDailyLimitUsd: cfg.MAX_DAILY_LIMIT_USD,
-    maxCosignsPerHour: cfg.MAX_COSIGNS_PER_HOUR,
     stepUpMaxAgeSeconds: cfg.STEP_UP_MAX_AGE_SECONDS,
   });
   const callers = cfg.DEV_CALLER_TOKENS ? new DevCallerVerifier(cfg.DEV_CALLER_TOKENS) : new GoogleCallerVerifier(cfg.CALLER_AUDIENCE, new Set([...cfg.ALLOWED_CALLERS, ...cfg.SUPPORT_CALLERS]));

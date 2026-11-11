@@ -90,15 +90,6 @@ class RecoveryController {
     return this.guardian.supportRecovery(recovery_id);
   }
 
-  @Post('v1/limit')
-  @HttpCode(200)
-  async limit(@Headers('authorization') auth: string | undefined, @Body() body: { call_id?: unknown; id_token?: unknown }) {
-    await this.apiCaller(auth);
-    const { call_id, id_token } = body ?? {};
-    if (typeof call_id !== 'string' || typeof id_token !== 'string' || id_token.length > 4096) return { ok: false, reason: 'bad_request' };
-    return this.guardian.raiseLimit(call_id, id_token);
-  }
-
   @Post('v1/device-change')
   @HttpCode(200)
   async deviceChange(@Headers('authorization') auth: string | undefined, @Body() body: { call_id?: unknown; id_token?: unknown }) {

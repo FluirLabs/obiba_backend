@@ -134,6 +134,29 @@ export class PrepareTransferInput {
   @Field(() => String, { nullable: true }) toPhone?: string | null;
   @Field(() => String, { nullable: true }) toAccount?: string | null;
   @Field() amount!: string;
+  @Field(() => String, { nullable: true }) requestId?: string | null;
+}
+
+@InputType()
+export class CreateMoneyRequestInput {
+  @Field() toHandle!: string;
+  @Field() amount!: string;
+  @Field(() => String, { nullable: true }) note?: string | null;
+}
+
+@ObjectType()
+export class MoneyRequestView {
+  @Field(() => ID) requestId!: string;
+  @Field() direction!: string;
+  @Field() counterpartyName!: string;
+  @Field(() => String, { nullable: true }) counterpartyHandle!: string | null;
+  @Field(() => String, { nullable: true }) counterpartyAccount!: string | null;
+  @Field() amount!: string;
+  @Field(() => String, { nullable: true }) note!: string | null;
+  @Field() status!: string;
+  @Field() paying!: boolean;
+  @Field() createdAt!: string;
+  @Field() updatedAt!: string;
 }
 
 @ObjectType()

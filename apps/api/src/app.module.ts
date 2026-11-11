@@ -29,6 +29,7 @@ import { SigningResolver } from './modules/signing.resolver';
 import { WithdrawalsResolver } from './modules/withdrawals.resolver';
 import { InvoicesResolver } from './modules/invoices.resolver';
 import { PaymentsResolver } from './modules/payments.resolver';
+import { MoneyRequestsResolver } from './modules/money-requests.resolver';
 import { SandboxResolver } from './modules/sandbox.resolver';
 import { DepositsResolver, ONECLICK } from './modules/deposits.resolver';
 import { OneClickClient } from '@obiba/intents';
@@ -79,6 +80,7 @@ export class AppModule {
       { provide: APP_GUARD, useClass: KillSwitchGuard },
       AccountResolver,
       PaymentsResolver,
+      MoneyRequestsResolver,
       InvoicesResolver,
       SandboxResolver,
       DepositsResolver,
