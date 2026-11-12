@@ -35,6 +35,9 @@ export const RULES: Record<string, Rule> = {
   invoice_create: { points: 30, duration: 60, key: 'uid', onStoreFailure: 'deny' },
   money_request: { points: 10, duration: 600, key: 'uid', onStoreFailure: 'deny' },
   invoice_view: { points: 60, duration: 60, key: 'ip', onStoreFailure: 'allow' },
+  checkout_view: { points: 60, duration: 60, key: 'ip', onStoreFailure: 'allow' },
+  checkout_pay: { points: 10, duration: 60, key: 'ip', onStoreFailure: 'deny' },
+  commerce_write: { points: 30, duration: 60, key: 'uid', onStoreFailure: 'deny' },
   invoice_pay_quote: { points: 10, duration: 60, key: 'ip', onStoreFailure: 'deny' },
   sandbox: { points: 30, duration: 60, key: 'uid', onStoreFailure: 'allow' },
 };

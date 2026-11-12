@@ -28,6 +28,7 @@ import { HumanCheck } from './security/human-check';
 import { SigningResolver } from './modules/signing.resolver';
 import { WithdrawalsResolver } from './modules/withdrawals.resolver';
 import { InvoicesResolver } from './modules/invoices.resolver';
+import { CommerceResolver } from './modules/commerce.resolver';
 import { PaymentsResolver } from './modules/payments.resolver';
 import { MoneyRequestsResolver } from './modules/money-requests.resolver';
 import { SandboxResolver } from './modules/sandbox.resolver';
@@ -82,6 +83,7 @@ export class AppModule {
       PaymentsResolver,
       MoneyRequestsResolver,
       InvoicesResolver,
+      CommerceResolver,
       SandboxResolver,
       DepositsResolver,
       ActivityResolver,

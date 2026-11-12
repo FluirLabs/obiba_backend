@@ -63,10 +63,108 @@ input BuildDelegateInput {
   publicKey: String!
 }
 
+type BusinessView {
+  businessId: ID!
+  category: String!
+  city: String!
+  legalName: String!
+  name: String!
+  ownerAccount: String!
+  prefix: String!
+  since: String!
+  supportEmail: String!
+  verified: Boolean!
+}
+
 type CancelRecoveryCall {
   accountId: String!
   argsBase64: String!
   methodName: String!
+}
+
+type CheckoutCustomerView {
+  accountId: String!
+  displayName: String
+  handle: String
+}
+
+type CheckoutItemView {
+  name: String!
+  qty: Int!
+  unit: String!
+}
+
+type CheckoutPayResult {
+  payment: CheckoutPaymentView
+  status: String!
+}
+
+type CheckoutPaymentView {
+  amount: String!
+  businessId: String!
+  checkoutId: String!
+  createdAt: String!
+  fee: String!
+  items: [CheckoutItemView!]!
+  method: String!
+  mine: Boolean!
+  payerAccount: String
+  payerName: String!
+  paymentId: ID!
+  rate: String!
+  receipt: String!
+  reference: String!
+  refunds: [CheckoutRefundView!]!
+  reports: [CheckoutReportView!]!
+  settlesAt: String!
+  txRef: String!
+  usdc: String!
+  wallet: String
+}
+
+type CheckoutRefundView {
+  amount: String!
+  completesAt: String!
+  createdAt: String!
+  reason: String!
+  refundId: ID!
+  usdc: String!
+}
+
+type CheckoutReportView {
+  createdAt: String!
+  detail: String!
+  reason: String!
+  reportId: ID!
+}
+
+type CheckoutView {
+  amount: String!
+  businessId: String!
+  checkoutId: ID!
+  code: String!
+  createdAt: String!
+  customer: CheckoutCustomerView
+  expiresAt: String!
+  items: [CheckoutItemView!]!
+  note: String
+  paymentId: String
+  quotedAt: String!
+  rate: String!
+  reference: String!
+  requested: Boolean!
+  status: String!
+  usdc: String!
+}
+
+type CommerceView {
+  business: BusinessView
+  businessPayments: [CheckoutPaymentView!]!
+  links: [CheckoutView!]!
+  merchants: [BusinessView!]!
+  purchases: [CheckoutPaymentView!]!
+  rate: String
+  requests: [CheckoutView!]!
 }
 
 input CreateAccountInput {
@@ -76,9 +174,18 @@ input CreateAccountInput {
   turnstileToken: String!
 }
 
+input CreateBusinessInput {
+  category: String!
+  city: String!
+  legalName: String
+  name: String!
+  supportEmail: String!
+}
+
 input CreateInvoiceInput {
   amount: String!
   expiresInMinutes: Int!
+  payerAccount: String
   reference: String
 }
 
@@ -88,11 +195,20 @@ input CreateMoneyRequestInput {
   toHandle: String!
 }
 
+input CreatePaymentLinkInput {
+  amount: String!
+  customerAccount: String
+  expiresInMinutes: Int!
+  note: String
+  reference: String!
+}
+
 type CreatedInvoice {
   amount: String!
   expiresAtNs: String!
   feeBps: Int!
   invoiceId: ID!
+  payerAccount: String
   paymentUrl: String!
   signature: String!
 }
@@ -180,6 +296,7 @@ type InvoicePayment {
 
 type InvoiceView {
   amount: String!
+  canPay: Boolean!
   crossChainEnabled: Boolean!
   expiresAtNs: String!
   feeBps: Int!
@@ -187,6 +304,7 @@ type InvoiceView {
   merchantAccount: String!
   merchantName: String!
   paymentUrl: String!
+  requiresObiba: Boolean!
   status: String!
   token: String!
 }
@@ -206,6 +324,7 @@ type Me {
 }
 
 type MerchantInvoice {
+  allowedPayerAccount: String
   amount: String!
   createdAt: String!
   expiresAtNs: String!
@@ -242,17 +361,23 @@ type Mutation {
   beginViewOnlySession: Boolean!
   buildDelegate(input: BuildDelegateInput!): UnsignedDelegateView!
   cancelMoneyRequest(requestId: String!): String!
+  cancelPaymentLink(checkoutId: String!): String!
   cancelRecovery(signedDelegate: String!): RecoveryView!
   cancelSupportRecovery: SupportCaseView!
   changeHandle(handle: String!): Me!
   confirmPhone: Boolean!
   confirmSupportRecovery(newPublicKey: String!, token: String!): SupportRequestReceipt!
   createAccount(input: CreateAccountInput!): Boolean!
+  createBusiness(input: CreateBusinessInput!): BusinessView!
   createInvoice(input: CreateInvoiceInput!): CreatedInvoice!
   createMoneyRequest(input: CreateMoneyRequestInput!): MoneyRequestView!
+  createPaymentLink(input: CreatePaymentLinkInput!): CheckoutView!
+  declineCheckout(checkoutId: String!): String!
   declineMoneyRequest(requestId: String!): String!
   markNotificationsRead(upToId: String!): Int!
   openSupportRecovery(newPublicKey: String!): SupportCaseView!
+  payCheckout(checkoutId: String!): CheckoutPayResult!
+  payCheckoutWithWallet(checkoutId: String!, wallet: String!): CheckoutPayResult!
   prepareInternalTestPayment(input: SandboxRequestInput!): InternalTestPayment!
   prepareInvoicePayment(invoiceId: String!): PreparedOp!
   prepareTokenEnable(token: String!): AccountCall!
@@ -260,12 +385,15 @@ type Mutation {
   prepareWithdrawal(input: PrepareWithdrawalInput!): PreparedWithdrawal!
   quoteDeposit(input: StartDepositInput!): QuoteView!
   quoteWithdrawal(input: PrepareWithdrawalInput!): QuoteView!
+  refundCheckoutPayment(amount: String!, paymentId: String!, reason: String!): CheckoutPayResult!
   registerDevice(publicKey: String!): DeviceResult!
   registerProfile(input: RegisterProfileInput!): Me!
   registerRecoveryKit(devicePublicKey: String!, deviceSignature: String!, kitPublicKey: String!): RecoveryKitStatus!
+  reportCheckoutPayment(detail: String!, paymentId: String!, reason: String!): String!
   requestCosign(deviceSignature: String!, opId: String!): PreparedOp!
   requestPasswordReset(email: String!): Boolean!
   requestSupportRecovery(email: String!, newPhone: String!): Boolean!
+  requoteCheckout(checkoutId: String!): PublicCheckoutView
   respondToMoneyRequest(decision: String!, requestId: String!): MoneyRequestView!
   revokeRequestPermission(id: String!): Boolean!
   sandboxSubmit(input: SandboxRequestInput!): SandboxReceiptView!
@@ -340,6 +468,14 @@ type PreparedWithdrawal {
   withdrawal: WithdrawalView!
 }
 
+type PublicCheckoutView {
+  business: BusinessView!
+  checkout: CheckoutView!
+  forMe: Boolean!
+  own: Boolean!
+  payment: CheckoutPaymentView
+}
+
 type Query {
   account: AccountView!
   accountCall(callId: String!): AccountCall
@@ -348,6 +484,7 @@ type Query {
   assembleSignedDelegate(delegateBase64: String!, signatureBase64: String!): String!
   balances: [Balance!]!
   cancelRecoveryCall: CancelRecoveryCall!
+  commerce: CommerceView!
   demoBalance: Balance!
   deposit(id: String!): DepositInstructions
   depositOptions: [DepositOption!]!
@@ -365,6 +502,7 @@ type Query {
   notifications(first: Int! = 20): [NotificationView!]!
   op(opId: String!): OpView
   pendingActivity: [PendingItem!]!
+  publicCheckout(key: String!): PublicCheckoutView
   recipient(query: String!): Recipient
   recovery: RecoveryView
   recoveryChallenge(newPublicKey: String!): RecoveryChallenge!

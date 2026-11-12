@@ -77,6 +77,10 @@ Customers paying from another NEAR wallet approve one transfer in their wallet, 
 
 Any Obiba customer can open a business account. Payments settle to the business's own Obiba account in the same transaction the customer pays, with no payout delay.
 
+Payment links can be open to anyone or restricted to one Obiba customer. Pass the selected customer's `payerAccount` to `createInvoice` to create a restricted link. The API resolves that account to an active Obiba user and keeps the user and account binding immutable. The customer must sign in with the matching account; external-wallet and cross-chain payments are unavailable for that link. Omitting `payerAccount` preserves an open link.
+
+Restricted invoices use the `obiba-invoice/v2` signature format, which includes the payer account. The payment contract refunds transfers from other accounts, and the account contract checks the payer before sending funds. Existing open invoices retain the v1 format. Both contracts must advertise payer-binding support before the API issues a restricted invoice. Business payment links, checkouts, payments, refunds and settlement records are served by the commerce API (`publicCheckout`, `createPaymentLink`, `payCheckout`, `refundCheckoutPayment`).
+
 ```mermaid
 flowchart LR
     S["Sign up on Obiba"] --> E["Enable business payments<br/>verified business profile"]

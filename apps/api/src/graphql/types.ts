@@ -202,10 +202,12 @@ export class CreateInvoiceInput {
   @Field() amount!: string;
   @Field(() => Int) expiresInMinutes!: number;
   @Field(() => String, { nullable: true }) reference?: string | null;
+  @Field(() => String, { nullable: true }) payerAccount?: string | null;
 }
 
 @ObjectType()
 export class CreatedInvoice {
+  @Field(() => String, { nullable: true }) payerAccount!: string | null;
   @Field(() => ID) invoiceId!: string;
   @Field() amount!: string;
   @Field(() => Int) feeBps!: number;
@@ -216,6 +218,7 @@ export class CreatedInvoice {
 
 @ObjectType()
 export class MerchantInvoice {
+  @Field(() => String, { nullable: true }) allowedPayerAccount!: string | null;
   @Field(() => ID) invoiceId!: string;
   @Field() amount!: string;
   @Field(() => Int) feeBps!: number;
@@ -234,6 +237,8 @@ export class MerchantInvoice {
 
 @ObjectType()
 export class InvoiceView {
+  @Field() requiresObiba!: boolean;
+  @Field() canPay!: boolean;
   @Field(() => ID) invoiceId!: string;
   @Field() merchantName!: string;
   @Field() merchantAccount!: string;
@@ -253,4 +258,138 @@ export class IndicativeRate {
   @Field() rate!: string;
   @Field() source!: string;
   @Field() asOf!: string;
+}
+
+@ObjectType()
+export class BusinessView {
+  @Field(() => ID) businessId!: string;
+  @Field() name!: string;
+  @Field() legalName!: string;
+  @Field() category!: string;
+  @Field() city!: string;
+  @Field() supportEmail!: string;
+  @Field() prefix!: string;
+  @Field() verified!: boolean;
+  @Field() ownerAccount!: string;
+  @Field() since!: string;
+}
+
+@ObjectType()
+export class CheckoutItemView {
+  @Field() name!: string;
+  @Field(() => Int) qty!: number;
+  @Field() unit!: string;
+}
+
+@ObjectType()
+export class CheckoutCustomerView {
+  @Field() accountId!: string;
+  @Field(() => String, { nullable: true }) displayName!: string | null;
+  @Field(() => String, { nullable: true }) handle!: string | null;
+}
+
+@ObjectType()
+export class CheckoutView {
+  @Field(() => ID) checkoutId!: string;
+  @Field() code!: string;
+  @Field() businessId!: string;
+  @Field() reference!: string;
+  @Field(() => String, { nullable: true }) note!: string | null;
+  @Field(() => [CheckoutItemView]) items!: CheckoutItemView[];
+  @Field() amount!: string;
+  @Field() rate!: string;
+  @Field() usdc!: string;
+  @Field() quotedAt!: string;
+  @Field() createdAt!: string;
+  @Field() expiresAt!: string;
+  @Field() status!: string;
+  @Field() requested!: boolean;
+  @Field(() => String, { nullable: true }) paymentId!: string | null;
+  @Field(() => CheckoutCustomerView, { nullable: true }) customer!: CheckoutCustomerView | null;
+}
+
+@ObjectType()
+export class CheckoutRefundView {
+  @Field(() => ID) refundId!: string;
+  @Field() amount!: string;
+  @Field() usdc!: string;
+  @Field() reason!: string;
+  @Field() createdAt!: string;
+  @Field() completesAt!: string;
+}
+
+@ObjectType()
+export class CheckoutReportView {
+  @Field(() => ID) reportId!: string;
+  @Field() reason!: string;
+  @Field() detail!: string;
+  @Field() createdAt!: string;
+}
+
+@ObjectType()
+export class CheckoutPaymentView {
+  @Field(() => ID) paymentId!: string;
+  @Field() receipt!: string;
+  @Field() checkoutId!: string;
+  @Field() businessId!: string;
+  @Field() reference!: string;
+  @Field(() => [CheckoutItemView]) items!: CheckoutItemView[];
+  @Field() amount!: string;
+  @Field() rate!: string;
+  @Field() usdc!: string;
+  @Field() fee!: string;
+  @Field() method!: string;
+  @Field(() => String, { nullable: true }) wallet!: string | null;
+  @Field() payerName!: string;
+  @Field(() => String, { nullable: true }) payerAccount!: string | null;
+  @Field() mine!: boolean;
+  @Field() txRef!: string;
+  @Field() createdAt!: string;
+  @Field() settlesAt!: string;
+  @Field(() => [CheckoutRefundView]) refunds!: CheckoutRefundView[];
+  @Field(() => [CheckoutReportView]) reports!: CheckoutReportView[];
+}
+
+@ObjectType()
+export class CommerceView {
+  @Field(() => BusinessView, { nullable: true }) business!: BusinessView | null;
+  @Field(() => [CheckoutView]) links!: CheckoutView[];
+  @Field(() => [CheckoutView]) requests!: CheckoutView[];
+  @Field(() => [CheckoutPaymentView]) businessPayments!: CheckoutPaymentView[];
+  @Field(() => [CheckoutPaymentView]) purchases!: CheckoutPaymentView[];
+  @Field(() => [BusinessView]) merchants!: BusinessView[];
+  @Field(() => String, { nullable: true }) rate!: string | null;
+}
+
+@ObjectType()
+export class PublicCheckoutView {
+  @Field(() => CheckoutView) checkout!: CheckoutView;
+  @Field(() => BusinessView) business!: BusinessView;
+  @Field() own!: boolean;
+  @Field() forMe!: boolean;
+  @Field(() => CheckoutPaymentView, { nullable: true }) payment!: CheckoutPaymentView | null;
+}
+
+@ObjectType()
+export class CheckoutPayResult {
+  @Field() status!: string;
+  @Field(() => CheckoutPaymentView, { nullable: true }) payment!: CheckoutPaymentView | null;
+}
+
+@InputType()
+export class CreateBusinessInput {
+  @Field() name!: string;
+  @Field({ nullable: true }) legalName?: string;
+  @Field() category!: string;
+  @Field() city!: string;
+  @Field() supportEmail!: string;
+}
+
+@InputType()
+export class CreatePaymentLinkInput {
+  @Field() amount!: string;
+  @Field() reference!: string;
+  @Field({ nullable: true }) note?: string;
+  @Field(() => Int) expiresInMinutes!: number;
+  @Field({ nullable: true }) customerAccount?: string;
 }

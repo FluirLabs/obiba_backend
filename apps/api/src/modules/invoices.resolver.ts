@@ -1,8 +1,8 @@
 import { Inject } from '@nestjs/common';
 import { Args, Context, Field, ID, InputType, Int, Mutation, ObjectType, Query, Resolver } from '@nestjs/graphql';
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import { withTx, withUserTx } from '@obiba/db';
-import { invoicePreimage, isHexId, newHexId, sha256, UNCAPPED_USD, USDC_DECIMALS, type Invoice, type Op } from '@obiba/domain';
+import { invoicePreimage, isHexId, isNearAccountId, newHexId, sha256, UNCAPPED_USD, USDC_DECIMALS, type Invoice, type Op } from '@obiba/domain';
 import { OneClickClient, OneClickError, checkSignedQuote, validRefundAddress, type OriginAsset, type QuoteRequest } from '@obiba/intents';
 import { APP_CONFIG, appOrigin, explorerTxUrl, type AppConfig } from '../config';
 import { appError } from '../errors';
@@ -110,10 +110,18 @@ export class InvoicesResolver {
       throw appError('BAD_INPUT', 'expiresInMinutes');
     }
     const ref = input.reference == null ? null : parse(reference, input.reference, 'reference');
+    if (input.payerAccount != null && !isNearAccountId(input.payerAccount)) throw appError('BAD_INPUT', 'payerAccount');
     const token = await invoiceToken(this.chain, this.config);
     return withUserTx(this.pool, uid, async (c) => {
       const merchant = await activeAccount(c, uid);
       if (!(await recoverySetUp(c, uid, this.verifier))) throw appError('RECOVERY_SETUP_REQUIRED');
+      const payer = input.payerAccount == null ? null : (await c.query<{ uid: string; account_id: string }>('select * from ops.invoice_payer($1)', [input.payerAccount])).rows[0];
+      if (input.payerAccount != null && !payer) throw appError('NOT_FOUND', 'payerAccount');
+      if (payer?.uid === uid) throw appError('BAD_INPUT', 'payerAccount');
+      if (payer) {
+        const supported = await this.chain.supportsRestrictedInvoices(payer.account_id).catch(() => false);
+        if (!supported) throw appError('SERVICE_PAUSED');
+      }
       const invoice: Invoice = {
         invoice_id: newHexId(),
         merchant,
@@ -122,13 +130,14 @@ export class InvoicesResolver {
         fee_bps: this.config.INVOICE_FEE_BPS,
         expires_at_ns: (nowNs() + BigInt(input.expiresInMinutes) * MINUTE_NS).toString(),
         reference: ref,
+        ...(payer ? { payer: payer.account_id } : {}),
       };
       const digest = sha256(invoicePreimage(this.config.NEAR_NETWORK, this.config.PAY_CONTRACT, invoice));
       const signature = (await this.signer.sign(digest)).toString('base64');
       await c.query(
-        `insert into ops.invoices(invoice_id, merchant_uid, merchant_account, token, amount, fee_bps, expires_at_ns, reference, signature, status)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'OPEN')`,
-        [invoice.invoice_id, uid, merchant, invoice.token, invoice.amount, invoice.fee_bps, invoice.expires_at_ns, ref, signature],
+        `insert into ops.invoices(invoice_id, merchant_uid, merchant_account, token, amount, fee_bps, expires_at_ns, reference, signature, status, payer_uid, payer_account)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'OPEN', $10, $11)`,
+        [invoice.invoice_id, uid, merchant, invoice.token, invoice.amount, invoice.fee_bps, invoice.expires_at_ns, ref, signature, payer?.uid ?? null, payer?.account_id ?? null],
       );
       await this.audit.record({ actor: uid, action: 'invoice.create', target: invoice.invoice_id, outcome: 'ALLOWED', requestId: req.requestId }, c);
       return {
@@ -138,6 +147,7 @@ export class InvoicesResolver {
         expiresAtNs: invoice.expires_at_ns,
         signature,
         paymentUrl: paymentUrl(this.config, invoice.invoice_id),
+        payerAccount: payer?.account_id ?? null,
       };
     });
   }
@@ -145,9 +155,10 @@ export class InvoicesResolver {
   @Query(() => InvoiceView, { nullable: true })
   @Public()
   @RateLimit('invoice_view')
-  async invoice(@Args('invoiceId') invoiceId: string): Promise<InvoiceView | null> {
+  async invoice(@Context('req') req: ObibaRequest, @Args('invoiceId') invoiceId: string): Promise<InvoiceView | null> {
     if (!isHexId(invoiceId)) throw appError('BAD_INPUT', 'invoiceId');
-    const r = await withTx(this.pool, (c) => c.query('select * from ops.public_invoice($1)', [invoiceId]));
+    const load = (c: PoolClient) => c.query('select * from ops.public_invoice($1)', [invoiceId]);
+    const r = req.identity ? await withUserTx(this.pool, req.identity.uid, load) : await withTx(this.pool, load);
     const i = r.rows[0];
     if (!i) return null;
     return {
@@ -160,7 +171,9 @@ export class InvoicesResolver {
       expiresAtNs: i.expires_at_ns,
       status: i.status,
       paymentUrl: paymentUrl(this.config, i.invoice_id),
-      crossChainEnabled: this.config.INVOICE_CROSSCHAIN,
+      crossChainEnabled: this.config.INVOICE_CROSSCHAIN && !i.requires_obiba,
+      requiresObiba: i.requires_obiba,
+      canPay: i.can_pay,
     };
   }
 
@@ -184,8 +197,9 @@ export class InvoicesResolver {
         status: string;
         created_at: Date;
         paid_event: { payer?: string | null; fee?: string | null; net?: string | null; tx_hash?: string | null; paid_at?: string | null } | null;
+        payer_account: string | null;
       }>(
-        `select invoice_id, amount::text, fee_bps, expires_at_ns::text, reference, status, created_at, paid_event from ops.invoices
+        `select invoice_id, amount::text, fee_bps, expires_at_ns::text, reference, status, created_at, paid_event, payer_account from ops.invoices
           where ($2::timestamptz is null or created_at < $2::timestamptz) order by created_at desc limit $1`,
         [first, before ?? null],
       ),
@@ -201,6 +215,7 @@ export class InvoicesResolver {
       paymentUrl: paymentUrl(this.config, i.invoice_id),
       createdAt: new Date(i.created_at).toISOString(),
       payer: i.paid_event?.payer ?? null,
+      allowedPayerAccount: i.payer_account,
       fee: i.paid_event?.fee ?? null,
       net: i.paid_event?.net ?? null,
       paidTxHash: i.paid_event?.tx_hash ?? null,
@@ -321,6 +336,10 @@ export class InvoicesResolver {
       const r = await c.query('select * from ops.invoice_for_payment($1)', [invoiceId]);
       const i = r.rows[0];
       if (!i) throw appError('NOT_FOUND', 'invoiceId');
+      if (i.payer_account != null) {
+        if (i.payer_account !== accountId) throw appError('FORBIDDEN', 'invoiceId');
+        if (!(await this.chain.supportsRestrictedInvoices(accountId).catch(() => false))) throw appError('SERVICE_PAUSED');
+      }
       if (i.merchant_account === accountId) throw appError('BAD_INPUT', 'invoiceId');
       const now = nowNs();
       if (BigInt(i.expires_at_ns) <= now) throw appError('EXPIRED');
@@ -333,6 +352,7 @@ export class InvoicesResolver {
           fee_bps: i.fee_bps,
           expires_at_ns: i.expires_at_ns,
           reference: i.reference,
+          ...(i.payer_account ? { payer: i.payer_account } : {}),
         },
         signature: i.signature,
       };

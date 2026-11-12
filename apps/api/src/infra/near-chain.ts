@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { APP_CONFIG, type AppConfig } from '../config';
 
 export interface AccountPolicy {
+  invoice_payer_binding?: boolean;
   tokens?: Array<{ token: string; decimals: number; enabled: boolean }>;
   guardian?: string;
   guardian_nonce?: string;
@@ -18,6 +19,7 @@ export interface AccountPolicy {
 export class UnknownEntityError extends Error {}
 
 export abstract class NearChain {
+  async supportsRestrictedInvoices(_accountId: string): Promise<boolean> { return false; }
   abstract finalBlockHeight(): Promise<bigint>;
   abstract policy(accountId: string): Promise<AccountPolicy>;
   abstract storageRegistered(token: string, accountId: string): Promise<boolean>;
@@ -103,6 +105,14 @@ export class RpcNearChain extends NearChain {
   async payTokens(): Promise<string[]> {
     const r = await this.view<{ tokens?: unknown }>(this.config.PAY_CONTRACT, 'get_config', {});
     return Array.isArray(r.tokens) ? r.tokens.filter((t): t is string => typeof t === 'string') : [];
+  }
+
+  override async supportsRestrictedInvoices(accountId: string): Promise<boolean> {
+    const [config, policy] = await Promise.all([
+      this.view<{ invoice_payer_binding?: boolean }>(this.config.PAY_CONTRACT, 'get_config', {}),
+      this.policy(accountId),
+    ]);
+    return config.invoice_payer_binding === true && policy.invoice_payer_binding === true;
   }
 
   async storageRegistered(token: string, accountId: string): Promise<boolean> {

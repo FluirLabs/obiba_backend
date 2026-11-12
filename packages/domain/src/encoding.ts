@@ -39,6 +39,7 @@ export interface Invoice {
   fee_bps: number;
   expires_at_ns: string;
   reference: string | null;
+  payer?: string | null;
 }
 
 export interface KeyPayload {
@@ -226,12 +227,13 @@ export function deviceOpPreimage(networkId: string, account: string, op: Op): Ui
 }
 
 export function invoicePreimage(networkId: string, payContract: string, invoice: Invoice): Uint8Array {
-  return serialize(INVOICE_ENVELOPE_SCHEMA, {
-    tag: INVOICE_TAG,
+  const preimage = serialize(INVOICE_ENVELOPE_SCHEMA, {
+    tag: invoice.payer ? 'obiba-invoice/v2' : INVOICE_TAG,
     network_id: networkId,
     pay_contract: payContract,
     invoice: invoiceValue(invoice),
   });
+  return invoice.payer ? Buffer.concat([preimage, serialize('string', invoice.payer)]) : preimage;
 }
 
 export function sha256(data: Uint8Array): Buffer {
