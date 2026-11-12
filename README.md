@@ -15,7 +15,7 @@ flowchart LR
     O --> R["Remittance"]
     O --> C["Mobile money<br/>and bank cash out"]
     O --> B["Airtime and bills"]
-    O --> M["Merchant payments"]
+    O --> M["Business checkout"]
     O --> W["Withdrawals"]
     classDef intents fill:#006ee6,stroke:#005bb5,color:#ffffff;
     class I intents;
@@ -32,10 +32,78 @@ flowchart LR
 | Bank payouts | Cash out to GCB, Ecobank, Stanbic, Absa and Fidelity |
 | Airtime and data | MTN, Telecel and AT |
 | Bills | ECG prepaid electricity, Ghana Water, DStv and GOtv |
-| Merchant payments | QR codes and payment links backed by signed invoices |
+| Checkout | Pay a business by QR code, payment link or 6-character code. Prices are set in cedis, the rate is locked for 10 minutes, and the customer pays no fee |
+| Business accounts | Payment links, QR codes, refunds, daily settlement statements, API keys and signed webhooks |
 | Withdrawals | To NEAR accounts, or to USDC on Base and Arbitrum through NEAR Intents |
 
-Mobile money, bank, remittance and bill payments currently run on a pilot rail pending provider integrations.
+Mobile money, bank, remittance and bill payments currently run on a pilot rail pending provider integrations. Business checkout settlement is being integrated on NEAR testnet.
+
+## Pay and checkout
+
+A customer can pay a business from their Obiba balance, or from any NEAR wallet without an Obiba account. Before approving, the customer sees the verified business, the order, the price in cedis, the rate, the USDC amount and how long the quote is held.
+
+```mermaid
+sequenceDiagram
+    participant C as Customer
+    participant P as Obiba checkout
+    participant A as Obiba API
+    participant R as Checkout relay
+    participant S as Payment settlement
+    participant B as Business account
+    C->>P: Scan QR, open link or enter code
+    P->>A: Load checkout and quote
+    A-->>P: Business, order, rate, USDC total
+    C->>P: Approve on device
+    P->>A: Signed transfer to relay
+    A->>R: Transfer confirmed on NEAR
+    R->>S: Pay with signed payment terms
+    S->>B: Business share, same transaction
+    S-->>A: Signed webhook
+    A->>A: Verify payment independently
+    A-->>C: Receipt
+```
+
+| Step | Guarantee |
+| --- | --- |
+| Quote | Rate held for 10 minutes. An expired quote must be refreshed and confirmed again |
+| Payment terms | Business, payout account, amount, fee and payer are signed and checked on chain |
+| Duplicate protection | Each order reference can be paid once, and each signed payment settles once |
+| Failure | If settlement is rejected or the quote lapses, the relay returns the funds to the customer |
+| Confirmation | A webhook is never trusted alone. The API confirms the payment before marking it paid |
+
+Customers paying from another NEAR wallet approve one transfer in their wallet, and it settles through the same contract.
+
+## Businesses
+
+Any Obiba customer can open a business account. Payments settle to the business's own Obiba account in the same transaction the customer pays, with no payout delay.
+
+```mermaid
+flowchart LR
+    S["Sign up on Obiba"] --> E["Enable business payments<br/>verified business profile"]
+    E --> B["Business payout setup<br/>payout account = Obiba account"]
+    B --> L["Payment link, QR or code"]
+    B --> X["Checkout from the<br/>business's own server"]
+    L --> P["Customer pays<br/>Obiba balance or NEAR wallet"]
+    X --> P
+    P --> T["Settled to the business<br/>in the same transaction"]
+    T --> D["Payments, refunds<br/>and daily statements"]
+    T --> H["Signed webhook<br/>to the business"]
+    classDef settle fill:#006ee6,stroke:#005bb5,color:#ffffff;
+    class B,T settle;
+```
+
+| Feature | Description |
+| --- | --- |
+| Payment links | Fixed amount in cedis, order reference, expiry, branded QR code and 6-character code |
+| Payments | Searchable history with status, rate, fee and settlement for every payment |
+| Refunds | Full or partial, returned to the customer's balance or wallet and shown on their receipt |
+| Settlements | Daily totals of gross, fees, refunds and net, with CSV export |
+| Developers | Publishable and secret API keys, checkout sessions from the business's server, signed webhooks |
+
+| Fees | |
+| --- | --- |
+| Customer | None |
+| Business | 1% of each payment, deducted at settlement. Not returned on refunds |
 
 ## NEAR Intents
 
@@ -76,17 +144,19 @@ flowchart TB
     DB --> W["Worker"]
     W --> N["NEAR<br/>obiba-account, obiba-pay"]
     W <--> I["NEAR Intents"]
+    W --> S["Payment settlement"]
+    S -.-> API
     G -.-> N
     N --> X["Indexer"]
     X --> DB
     classDef intents fill:#006ee6,stroke:#005bb5,color:#ffffff;
-    class I intents;
+    class I,S intents;
 ```
 
 | Service | Responsibility |
 | --- | --- |
-| `api` | GraphQL API, restricted to allow-listed operations. Prepares payments for signing on the customer's device |
-| `worker` | Relays signed transactions, provisions accounts, tracks deposits and withdrawals, sends customer email |
+| `api` | GraphQL API, restricted to allow-listed operations. Prepares payments for signing on the customer's device, serves checkout sessions to businesses and receives settlement webhooks |
+| `worker` | Relays signed transactions, provisions accounts, tracks deposits and withdrawals, runs the checkout relay, sends customer email |
 | `indexer` | Streams finalized NEAR blocks into the double-entry ledger |
 | `guardian` | Independent service that co-signs payments above the account limit |
 | `admin`, `ops` | Staff API and operations console |
