@@ -13,8 +13,6 @@ import { KillSwitch } from '../security/kill-switch';
 import { identityOf, type ObibaRequest } from '../security/request';
 import { activeAccount } from './payments.resolver';
 import { amount } from './validation';
-import { recoverySetUp } from '../infra/notify';
-import { IdTokenVerifier } from '../security/identity';
 import { QuoteFees, QuoteView, feesOf, quoteView } from './quotes';
 
 export const ONECLICK = Symbol('ONECLICK');
@@ -117,7 +115,6 @@ export class DepositsResolver {
     @Inject(APP_CONFIG) private readonly config: AppConfig,
     @Inject(ONECLICK) private readonly oneclick: OneClickClient,
     private readonly audit: AuditService,
-    private readonly verifier: IdTokenVerifier,
   ) {
     this.origins = new Map(depositOrigins(config).map((o) => [o.key, o]));
   }
@@ -132,11 +129,7 @@ export class DepositsResolver {
     if (!origin) throw appError('BAD_INPUT', 'origin');
     if (!validRefundAddress(origin.chain, input.refundAddress)) throw appError('BAD_INPUT', 'refundAddress');
     const units = amount(input.amount, origin.decimals, MAX_UNITS * 10n ** BigInt(origin.decimals));
-    const accountId = await withUserTx(this.pool, uid, async (c) => {
-      const account = await activeAccount(c, uid);
-      if (!(await recoverySetUp(c, uid, this.verifier))) throw appError('RECOVERY_SETUP_REQUIRED');
-      return account;
-    });
+    const accountId = await withUserTx(this.pool, uid, (c) => activeAccount(c, uid));
     const body: QuoteRequest = {
       dry,
       swapType: 'FLEX_INPUT',
@@ -170,11 +163,7 @@ export class DepositsResolver {
   @Query(() => DirectDeposit)
   async directDeposit(@Context('req') req: ObibaRequest): Promise<DirectDeposit> {
     const { uid } = identityOf(req);
-    const accountId = await withUserTx(this.pool, uid, async (c) => {
-      const account = await activeAccount(c, uid);
-      if (!(await recoverySetUp(c, uid, this.verifier))) throw appError('RECOVERY_SETUP_REQUIRED');
-      return account;
-    });
+    const accountId = await withUserTx(this.pool, uid, (c) => activeAccount(c, uid));
     return { network: 'NEAR', token: 'USDC', tokenContract: this.config.USDC_CONTRACT, address: accountId };
   }
 
